@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Racket Leegue</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="game-shell">
+      <canvas id="game" width="1280" height="720" aria-label="Racket Leegue game"></canvas>
+      <header class="scoreboard hidden" id="gameHud">
+        <div class="team-card team-card-blue">
+          <span id="blueLabel">Blue</span>
+          <strong id="playerScore">0</strong>
+        </div>
+        <div class="score-center">
+          <span id="matchLabel">Racket Leegue</span>
+          <strong id="matchState">Kickoff</strong>
+        </div>
+        <div class="team-card team-card-red">
+          <span id="orangeLabel">Orange</span>
+          <strong id="aiScore">0</strong>
+        </div>
+      </header>
+      <button class="menu-return hidden" id="menuReturnButton" type="button">Main Menu</button>
+      <aside class="boost-chip hidden" id="boostHud">
+        <span>Boost</span>
+        <strong id="boostValue">100</strong>
+      </aside>
+      <details class="controls-panel hidden" id="controlsHud">
+        <summary>Controls</summary>
+        <ul class="controls">
+          <li><strong>Drive:</strong> W A S D or arrow keys</li>
+          <li><strong>Jump:</strong> J or Space for jump and double jump</li>
+          <li><strong>Ball cam:</strong> B to toggle</li>
+          <li><strong>Boost:</strong> Shift, including in the air</li>
+          <li><strong>Boost pads:</strong> Drive over glowing pads</li>
+          <li><strong>Reset:</strong> R</li>
+        </ul>
+      </details>
+      <section class="menu-overlay" id="menuOverlay">
+        <div class="menu-panel">
+          <div class="title-block">
+            <span class="eyebrow">Arena Garage</span>
+            <h1>Racket Leegue</h1>
+            <p>Build your car, tune the colors, then pick a match.</p>
+          </div>
+
+          <div class="menu-grid">
+            <section class="menu-card">
+              <h2>Car Shape</h2>
+              <div class="shape-grid" id="shapeGrid">
+                <button class="shape-button active" data-shape="octane" type="button">Octane</button>
+                <button class="shape-button" data-shape="dominus" type="button">Dominus</button>
+                <button class="shape-button" data-shape="breakout" type="button">Breakout</button>
+              </div>
+            </section>
+
+            <section class="menu-card">
+              <h2>Colors</h2>
+              <label class="picker">
+                <span>Body</span>
+                <input id="carColorInput" type="color" value="#38bdf8" />
+              </label>
+              <label class="picker">
+                <span>Boost</span>
+                <input id="boostColorInput" type="color" value="#f59e0b" />
+              </label>
+              <label class="picker">
+                <span>Wheels</span>
+                <input id="wheelColorInput" type="color" value="#94a3b8" />
+              </label>
+            </section>
+
+            <section class="menu-card">
+              <h2>Time Of Day</h2>
+              <div class="shape-grid" id="timeGrid">
+                <button class="shape-button active" data-time="day" type="button">Day</button>
+                <button class="shape-button" data-time="dawn" type="button">Dawn</button>
+                <button class="shape-button" data-time="dusk" type="button">Dusk</button>
+                <button class="shape-button" data-time="night" type="button">Night</button>
+              </div>
+            </section>
+
+            <section class="menu-card menu-card-preview">
+              <h2>Preset</h2>
+              <p id="previewLabel">Octane with blue bodywork and amber boost.</p>
+              <div class="legend-row">
+                <span><i class="legend-swatch legend-body" id="bodySwatch"></i>Body</span>
+                <span><i class="legend-swatch legend-boost" id="boostSwatch"></i>Boost</span>
+                <span><i class="legend-swatch legend-wheel" id="wheelSwatch"></i>Wheels</span>
+              </div>
+            </section>
+
+            <section class="menu-card menu-card-play">
+              <h2>Play</h2>
+              <div class="play-grid">
+                <button class="play-button" data-mode="freeplay" type="button">Free Play</button>
+                <button class="play-button" data-mode="duel" type="button">1v1 Bot</button>
+                <button class="play-button" data-mode="doubles" type="button">2v2 Bot</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+      <section class="result-overlay hidden" id="resultOverlay">
+        <div class="result-panel">
+          <span class="eyebrow">Match Complete</span>
+          <h2 id="resultTitle">Blue Wins</h2>
+          <p id="resultSubtitle">Final score 0 - 0</p>
+          <div class="result-actions">
+            <button class="play-button" id="playAgainButton" type="button">Play Again</button>
+            <button class="shape-button" id="garageButton" type="button">Garage</button>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="game.js"></script>
+  </body>
+</html>
