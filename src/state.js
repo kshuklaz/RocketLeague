@@ -243,11 +243,24 @@ export function triggerGoalSequence(scoredByTeam, scorerId) {
   state.replayGoal = scoredByTeam;
   state.replayScorerId = scorerId;
   state.goalFreezeTimer = 0.55;
-  state.replayTimer = 5.6;
+  // compute replay duration dynamically so playback always reaches the
+  // end regardless of how long the prerecorded frames are. add a small
+  // buffer for the goal freeze effect.
+  // when a goal occurs we want to play back from the last touch up to the
+  // moment the ball actually enters the net. previously we computed a timer
+  // based on the number of stored frames, but that could expire early when
+  // the replay was artificially slowed (for slow‑mo) and the cursor hadn’t yet
+  // reached the goal frame.  instead, treat the timer merely as a short
+  // post‑goal buffer and drive the end of the replay by the cursor hitting the
+  // goal frame.
   state.replayContactFrame = Math.min(state.replayTouchCursor, Math.max(0, state.replayFrames.length - 1));
   state.replayGoalFrame = Math.max(0, state.replayFrames.length - 1);
   state.replayGoalSeenTimer = -1;
+  // start two seconds before contact as before, but we will ignore the timer
+  // while the replay is moving toward the goal.
   state.replayCursor = Math.max(0, state.replayContactFrame - 120);
+  // small buffer after meeting the goal for the camera zoom effect
+  state.replayTimer = 0.6; // seconds of hang time once the goal frame has been seen
   state.message = `${scoredByTeam === "blue" ? "Blue" : "Orange"} scored`;
   state.messageTimer = 180;
   const explosionX = scoredByTeam === "blue" ? FIELD.halfWidth + 40 : -FIELD.halfWidth - 40;
@@ -289,6 +302,25 @@ export function resetAfterGoal() {
   state.goalFreezeTimer = 0;
   state.kickoffTimer = state.mode === "freeplay" ? 0 : 4;
   state.lastTouchId = null;
+}
+
+// simpler reset used only by freeplay respawn; avoids changing car list.
+export function respawnFreeplay() {
+  resetBall();
+  resetBoostPads();
+  state.particles = [];
+  // clear any active replay data
+  state.replayFrames = [];
+  state.replayTimer = 0;
+  state.replayCursor = 0;
+  state.replayContactFrame = 0;
+  state.replayGoalFrame = 0;
+  state.replayGoalSeenTimer = -1;
+  state.replayGoal = null;
+  state.replayScorerId = null;
+  state.replayTouchCursor = 0;
+  state.goalFreezeTimer = 0;
+  // do not touch kickoffTimer, matchTime, scores, or car list
 }
 
 export function buildResultCars(team) {

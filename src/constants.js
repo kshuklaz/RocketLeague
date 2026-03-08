@@ -10,7 +10,8 @@ export const FIELD = {
 };
 
 export const CAR_RADIUS = 24;
-export const BALL_RADIUS = 18;
+// make the ball larger to give it more presence and make collisions easier
+export const BALL_RADIUS = 24;
 export const SMALL_PAD_VALUE = 28;
 export const BIG_PAD_VALUE = 100;
 

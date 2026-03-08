@@ -28,22 +28,35 @@ function updateGame(dt) {
       state.goalFreezeTimer = Math.max(0, state.goalFreezeTimer - dt);
       physics.updateParticles(dt);
     } else {
-      state.replayTimer = Math.max(0, state.replayTimer - dt);
       applyReplayFrame(state.replayFrames[Math.floor(state.replayCursor)]);
-      if (state.replayGoalSeenTimer >= 0) {
-        state.replayGoalSeenTimer += dt;
-      } else if (state.replayCursor >= state.replayGoalFrame) {
-        state.replayGoalSeenTimer = 0;
+
+      // once the cursor reaches the goal frame we start a short timer so that
+      // the camera can execute its zoom/out animation; the replay is not allowed
+      // to finish until *after* this timer expires.  this guarantees the ball
+      // will always make it into the net, no matter how slowly we advance the
+      // cursor in slow‑motion.
+      if (state.replayCursor >= state.replayGoalFrame) {
+        if (state.replayGoalSeenTimer >= 0) {
+          state.replayGoalSeenTimer += dt;
+        } else {
+          state.replayGoalSeenTimer = 0;
+        }
       }
+
       const replayContactDelta = Math.abs(state.replayCursor - state.replayContactFrame);
-      const baseSpeed = replayContactDelta < 20 ? 0.38 : replayContactDelta < 48 ? 0.65 : 1;
-      const SPEED_MULTIPLIER = 3;
-      // only apply the boost after the contact zone has passed; this ensures the
-      // camera zoom/slow‑mo is visible for the intended number of frames.
-      const inContactZone = replayContactDelta < 48;
-      const delta = baseSpeed * (inContactZone ? 1 : SPEED_MULTIPLIER);
+      const baseSpeed = replayContactDelta < 20 ? 0.3 : replayContactDelta < 48 ? 0.6 : 1;
+      const delta = baseSpeed;
       state.replayCursor = Math.min(state.replayFrames.length - 1, state.replayCursor + delta);
-      if (state.replayTimer === 0) {
+
+      // only decrement the timer after we've seen the goal frame; before that
+      // the replayTimer simply holds our post‑goal hang time.
+      if (state.replayGoalSeenTimer >= 0) {
+        state.replayTimer = Math.max(0, state.replayTimer - dt);
+      }
+
+      // if the post‑goal buffer has elapsed and we've already passed the goal
+      // we can safely return to normal gameplay.
+      if (state.replayTimer === 0 && state.replayGoalSeenTimer >= 0) {
         resetAfterGoal();
       }
     }
@@ -52,20 +65,24 @@ function updateGame(dt) {
 
   if (state.mode !== "freeplay" && state.kickoffTimer > 0) {
     state.kickoffTimer = Math.max(0, state.kickoffTimer - dt);
+    // use the UI helper so that the banner timer is refreshed each time we
+    // change the text. this prevents situations where the timer has already
+    // expired mid‑countdown (which could make the numbers disappear), and
+    // also keeps our rendering logic later simpler.
     if (state.kickoffTimer > 3) {
-      state.bannerText = "3";
+      ui.setBanner("3", 0.9);
       return;
     } else if (state.kickoffTimer > 2) {
-      state.bannerText = "2";
+      ui.setBanner("2", 0.9);
       return;
     } else if (state.kickoffTimer > 1) {
-      state.bannerText = "1";
+      ui.setBanner("1", 0.9);
       return;
     } else if (state.kickoffTimer > 0) {
-      state.bannerText = "GO!";
+      ui.setBanner("GO!", 0.9);
     } else {
-      state.bannerText = "";
-      state.bannerTimer = 0;
+      // safely clear banner when kickoff is complete
+      ui.setBanner("", 0);
     }
   }
 
@@ -88,7 +105,14 @@ function updateGame(dt) {
       }
     }
     if (previousTime > 0 && state.matchTime === 0) {
+      // elapsed match time – compute winner and show result overlay
       finishMatch();
+      // sync the result panel elements and transition the screen
+      ui.resultTitleEl.textContent = state.resultTitle;
+      ui.resultSubtitleEl.textContent = state.resultSubtitle;
+      state.message = state.resultTitle;
+      state.messageTimer = 150;
+      ui.setScreen("result");
       return;
     }
   }
@@ -171,6 +195,15 @@ function frame(time) {
     item.draw();
   }
   render.drawOverlay();
+  // menu-specific fix: the camera sometimes dips beneath the floor during
+  // the crowd flyby shots, which would make the floor occlude the stands
+  // in a painter’s‑algorithm renderer.  re‑draw the stands (and then the
+  // field boundary lines) last so the crowd remains visible but the white
+  // edge markings stay on top of the bleachers.
+  if (state.screen === "menu") {
+    render.drawStands();
+    render.drawFieldLines();
+  }
   ui.syncHud();
 
   requestAnimationFrame(frame);

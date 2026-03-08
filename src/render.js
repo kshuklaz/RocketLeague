@@ -202,14 +202,10 @@ export function makeRenderables() {
       z: -40,
       spin: state.menuOrbit * 18,
     };
+    // draw menu ball without touching state.ball
     _renderables.push({
       depth: worldDepth(menuBall.x, menuBall.y, menuBall.z),
-      draw: () => {
-        const originalBall = { ...state.ball };
-        Object.assign(state.ball, menuBall);
-        drawBall();
-        Object.assign(state.ball, originalBall);
-      },
+      draw: () => drawBallAt(menuBall),
     });
   }
 
@@ -230,8 +226,13 @@ export function makeRenderables() {
 
 // helper routines for arena and vehicle rendering (moved from legacy file)
 export function drawArena() {
-  drawStands();
+  // floor first, stands second – but menu shots occasionally put the
+  // camera below the floor, which still leaves the field between the
+  // camera and the crowd using the painter’s algorithm.  to guarantee
+  // the crowd is always visible in the menu we’ll re‑draw the stands
+  // at the end of the frame.
   drawTiledFloor();
+  drawStands();
   drawFieldLines();
   drawGoalVolume(-1, "rgba(96,165,250,0.28)");
   drawGoalVolume(1, "rgba(248,113,113,0.28)");
@@ -301,7 +302,7 @@ function drawGoalBox(direction) {
   drawRectLine(x0, z0, x1, z1, "rgba(255,255,255,0.28)");
 }
 
-function drawFieldLines() {
+export function drawFieldLines() {
   draw3DLine(-FIELD.halfWidth, 1, 0, FIELD.halfWidth, 1, 0, "rgba(255,255,255,0.65)", 3);
   drawCircleLine(0, 1, 0, 165, "rgba(255,255,255,0.55)");
   drawRectLine(-FIELD.halfWidth, -FIELD.halfDepth, FIELD.halfWidth, FIELD.halfDepth, "rgba(255,255,255,0.5)");
@@ -445,7 +446,7 @@ function drawFloodlights() {
   }
 }
 
-function drawStands() {
+export function drawStands() {
   drawStandSurface("north");
   drawStandSurface("south");
   drawStandSurface("west");
@@ -817,8 +818,43 @@ function drawCar(car) {
   }
 }
 
-function drawBallPattern(point, radius) {
-  const spin = state.ball.spin;
+// drawBallAt is a version of drawBall that operates on an arbitrary ball
+// object rather than state.ball.  This allows menu rendering to show a
+// preview ball without mutating global state or causing flicker.
+function drawBallAt(ballObj) {
+  // interpolate position/spin if prev values exist on the object
+  let backup;
+  const alpha = state.renderAlpha || 0;
+  if (ballObj.prevX !== undefined && alpha > 0) {
+    backup = { ...ballObj };
+    ballObj.x = ballObj.prevX + (ballObj.x - ballObj.prevX) * alpha;
+    ballObj.y = ballObj.prevY + (ballObj.y - ballObj.prevY) * alpha;
+    ballObj.z = ballObj.prevZ + (ballObj.z - ballObj.prevZ) * alpha;
+    ballObj.spin = ballObj.prevSpin + (ballObj.spin - ballObj.prevSpin) * alpha;
+  }
+
+  const shadow = projectPoint(ballObj.x, 1, ballObj.z);
+  const point = projectPoint(ballObj.x, ballObj.y, ballObj.z);
+  if (!point || !shadow) {
+    if (backup) Object.assign(ballObj, backup);
+    return;
+  }
+  ctx.fillStyle = "rgba(15,23,42,0.28)";
+  ctx.beginPath();
+  ctx.ellipse(shadow.x, shadow.y, 22 * shadow.scale, 10 * shadow.scale, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const radius = BALL_RADIUS * point.scale * 1.8;
+
+  if (backup) Object.assign(ballObj, backup);
+  const gradient = ctx.createRadialGradient(point.x - radius * 0.35, point.y - radius * 0.35, radius * 0.2, point.x, point.y, radius);
+  gradient.addColorStop(0, "#ffffff");
+  gradient.addColorStop(0.6, "#dbe7f5");
+  gradient.addColorStop(1, "#94a3b8");
+}
+
+function drawBallPattern(point, radius, spin) {
+  // spin passed in so rendering of menu ball doesn’t depend on state.ball
   ctx.save();
   ctx.translate(point.x, point.y);
   ctx.rotate(spin);
@@ -873,7 +909,7 @@ function drawBall() {
   ctx.beginPath();
   ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
   ctx.fill();
-  drawBallPattern(point, radius);
+  drawBallPattern(point, radius, state.ball.spin);
   ctx.strokeStyle = "rgba(71,85,105,0.9)";
   ctx.lineWidth = Math.max(1, point.scale * 1.5);
   ctx.stroke();

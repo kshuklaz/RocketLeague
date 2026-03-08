@@ -9,14 +9,15 @@ export function updateCar(car, throttle, steering, useBoost, jumpPressed, dt) {
   const { cos, sin, sqrt, max } = Math;
 
   const turnRate = 4.1;
-  const driveAccel = 900;
-  const reverseAccel = 460;
+  // raised acceleration and top speeds for a zippier feel
+  const driveAccel = 1400;
+  const reverseAccel = 800;
   const onGround = car.y > 0;
   const baseDrag = onGround ? 0.9962 : 0.9935;
   const lateralGrip = onGround ? 0.965 : 0.9;
   const boosting = useBoost && car.boost > 0;
-  const accel = boosting ? 1540 : throttle >= 0 ? driveAccel : reverseAccel;
-  const maxSpeed = boosting ? 900 : 660;
+  const accel = boosting ? 2200 : throttle >= 0 ? driveAccel : reverseAccel;
+  const maxSpeed = boosting ? 1200 : 1000;
 
   car.angle = normalizeAngle(car.angle + steering * turnRate * dt * (onGround ? 0.82 : 1));
   car.pitch = lerp(car.pitch, clamp(-throttle * 0.18 + car.vy * 0.0008, -0.35, 0.35), 0.12);
@@ -304,10 +305,13 @@ export function updateBall(dt) {
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
   ball.z += ball.vz * dt;
-  ball.vx *= wasGrounded ? 0.9988 : 0.9992;
+  // apply drag and gravity
+  const groundDrag = 0.995;
+  const airDrag = 0.9992;
+  ball.vx *= wasGrounded ? groundDrag : airDrag;
   ball.vy -= GRAVITY * dt;
-  ball.vz *= wasGrounded ? 0.9988 : 0.9992;
-  // avoid Math.hypot overhead
+  ball.vz *= wasGrounded ? groundDrag : airDrag;
+  // avoid Math.hypot overhead when computing spin
   ball.spin += Math.sqrt(ball.vx * ball.vx + ball.vz * ball.vz) * dt * 0.02;
 
   const rampHeight = getRampHeightAt(ball.x, ball.z, true);

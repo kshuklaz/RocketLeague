@@ -146,7 +146,9 @@ export function initUIListeners(onPlay) {
     }
 
     if (event.key === "r" || event.key === "R") {
-      if (state.screen === "game") {
+      // restart allowed only when playing freeplay – real matches cannot be
+      // restarted using the keyboard.
+      if (state.screen === "game" && state.mode === "freeplay") {
         onPlay(state.mode);
       }
       return;
