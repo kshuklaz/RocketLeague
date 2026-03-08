@@ -8,14 +8,14 @@
   </head>
   <body>
     <main class="game-shell">
-      <canvas id="game" width="1280" height="720" aria-label="Racket Leegue game"></canvas>
+      <canvas id="game" width="1280" height="720" aria-label="Rocket League game"></canvas>
       <header class="scoreboard hidden" id="gameHud">
         <div class="team-card team-card-blue">
           <span id="blueLabel">Blue</span>
           <strong id="playerScore">0</strong>
         </div>
         <div class="score-center">
-          <span id="matchLabel">Racket Leegue</span>
+          <span id="matchLabel">Rocket League</span>
           <strong id="matchState">Kickoff</strong>
         </div>
         <div class="team-card team-card-red">
@@ -43,7 +43,7 @@
         <div class="menu-panel">
           <div class="title-block">
             <span class="eyebrow">Arena Garage</span>
-            <h1>Racket Leegue</h1>
+            <h1>Rocket League</h1>
             <p>Build your car, tune the colors, then pick a match.</p>
           </div>
 
@@ -116,6 +116,6 @@
         </div>
       </section>
     </main>
-    <script src="game.js"></script>
+    <script type="module" src="src/main.js"></script>
   </body>
 </html>

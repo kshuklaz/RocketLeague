@@ -1,0 +1,25 @@
+{
+  "name": "rocketleague",
+  "version": "1.0.0",
+  "description": "RocketLeague is a browser-based JavaScript project simulating a simplified Rocket League match.",
+  "main": "game.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kshuklaz/RocketLeague.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/kshuklaz/RocketLeague/issues"
+  },
+  "homepage": "https://github.com/kshuklaz/RocketLeague#readme",
+  "dependencies": {
+    "puppeteer": "^24.38.0",
+    "serve-handler": "^6.1.7"
+  }
+}
