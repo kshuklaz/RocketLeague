@@ -289,6 +289,7 @@ const state = {
   menuOrbit: 0,
   menuShot: 0,
   menuShotTimer: 0,
+  lastTouchId: null, // track who last hit the ball
 };
 
 function formatClock(totalSeconds) {
@@ -373,6 +374,9 @@ function resetBall() {
   state.ball.vy = 0;
   state.ball.vz = (Math.random() - 0.5) * 70;
   state.ball.spin = 0;
+
+  // clear any previous touch information when the ball is reset
+  state.lastTouchId = null;
 }
 
 function resetBoostPads() {
@@ -430,6 +434,9 @@ function setupMatch(mode) {
   state.cars = [];
   state.resultCars = [];
   const config = MODES[mode];
+
+  // new match, forget who last touched the ball
+  state.lastTouchId = null;
 
   for (let i = 0; i < config.blue; i += 1) {
     state.cars.push(createTeamCar("blue", i, i === 0));
@@ -597,6 +604,9 @@ function resetAfterGoal() {
   state.replayTouchCursor = 0;
   state.goalFreezeTimer = 0;
   state.kickoffTimer = state.mode === "freeplay" ? 0 : 4;
+  // reset the last-toucher when a goal is cleared
+  state.lastTouchId = null;
+
   if (state.mode === "freeplay") {
     state.bannerText = "";
     state.bannerTimer = 0;
@@ -970,12 +980,12 @@ function updateBall(dt) {
   const insideGoalHeight = ball.y + BALL_RADIUS <= FIELD.goalHeight + 2;
   if (ball.x + BALL_RADIUS < -FIELD.halfWidth && insideGoalLane && insideGoalHeight) {
     state.scores.orange += 1;
-    triggerGoalSequence("orange", lastTouchId || "orange-0");
+    triggerGoalSequence("orange", state.lastTouchId || "orange-0");
     return;
   }
   if (ball.x - BALL_RADIUS > FIELD.halfWidth && insideGoalLane && insideGoalHeight) {
     state.scores.blue += 1;
-    triggerGoalSequence("blue", lastTouchId || "blue-0");
+    triggerGoalSequence("blue", state.lastTouchId || "blue-0");
     return;
   }
 
@@ -2100,7 +2110,6 @@ function updateCustomizationPreview() {
   }
 }
 
-let lastTouchId = null;
 
 function updateGame(dt) {
   state.messageTimer = Math.max(0, state.messageTimer - 1);
@@ -2181,7 +2190,7 @@ function updateGame(dt) {
   for (const car of state.cars) {
     const touchId = collideCarWithBall(car);
     if (touchId) {
-      lastTouchId = touchId;
+      state.lastTouchId = touchId;
       state.replayTouchCursor = Math.max(0, state.replayFrames.length - 1);
     }
   }
