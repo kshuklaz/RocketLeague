@@ -53,6 +53,57 @@ canvas {
   background: #08111f;
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
 .menu-overlay {
   position: absolute;
   inset: 0;
@@ -61,10 +112,19 @@ canvas {
   align-items: stretch;
   justify-content: flex-start;
   padding: 24px;
+  opacity: 1;
+  pointer-events: auto;
   background:
     linear-gradient(90deg, rgba(3, 7, 18, 0.9), rgba(3, 7, 18, 0.76) 28%, rgba(3, 7, 18, 0.28) 54%, rgba(3, 7, 18, 0.04) 78%),
     radial-gradient(circle at 70% 30%, rgba(56, 189, 248, 0.16), transparent 30%),
     radial-gradient(circle at 50% 75%, rgba(249, 115, 22, 0.12), transparent 24%);
+  animation: fadeIn 0.8s ease-out;
+}
+
+.menu-overlay.hidden {
+  animation: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .menu-panel {
@@ -77,6 +137,9 @@ canvas {
   backdrop-filter: blur(16px);
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.35);
   padding: 28px;
+  opacity: 1;
+  transform: translateX(0);
+  animation: slideInLeft 1s ease-out;
 }
 
 .result-overlay {
@@ -86,8 +149,17 @@ canvas {
   display: grid;
   place-items: start center;
   padding-top: 56px;
+  opacity: 1;
+  pointer-events: auto;
   background:
     linear-gradient(180deg, rgba(2, 6, 23, 0.24), rgba(2, 6, 23, 0.52) 58%, rgba(2, 6, 23, 0.78));
+  animation: fadeIn 0.8s ease-out;
+}
+
+.result-overlay.hidden {
+  animation: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .result-panel {
@@ -98,7 +170,10 @@ canvas {
   backdrop-filter: blur(14px);
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.35);
   padding: 26px 28px;
+  opacity: 1;
+  transform: translateY(0);
   text-align: center;
+  animation: slideDown 1s ease-out;
 }
 
 .result-panel h2 {
@@ -131,6 +206,10 @@ canvas {
 .boost-chip strong {
   font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
   letter-spacing: 0.04em;
+}
+
+.title-block {
+  margin-bottom: 16px;
 }
 
 .eyebrow {

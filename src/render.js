@@ -179,14 +179,15 @@ export function makeRenderables() {
     }
     _renderables.push({ depth: worldDepth(state.ball.x, state.ball.y, state.ball.z), draw: drawBall });
   } else if (state.screen === "menu") {
-    // preview car
+    // preview car (keep as menu focal object)
     const previewCar = makeCar({
       id: "preview",
       name: "Preview",
       team: "blue",
       controlled: false,
-      x: 180,
-      z: 40,
+      // position on field
+      x: 0,
+      z: 0,
       angle: Math.PI * 0.92,
       color: state.custom.color,
       boostColor: state.custom.boostColor,
@@ -196,17 +197,10 @@ export function makeRenderables() {
     });
     _renderables.push({ depth: worldDepth(previewCar.x, 20, previewCar.z), draw: () => drawCar(previewCar) });
 
-    const menuBall = {
-      x: -60,
-      y: BALL_RADIUS,
-      z: -40,
-      spin: state.menuOrbit * 18,
-    };
-    // draw menu ball without touching state.ball
-    _renderables.push({
-      depth: worldDepth(menuBall.x, menuBall.y, menuBall.z),
-      draw: () => drawBallAt(menuBall),
-    });
+    // remove the menu preview ball to prevent the small 'popup dot' from
+    // appearing whenever menu controls are clicked.
+    // We keep full field+crowd/stands rendering in place for the animated menu.
+
   }
 
   for (const particle of state.particles) {
@@ -573,6 +567,7 @@ function drawStandBands(side) {
 }
 
 function drawCrowdEgg(x, y, z, color, phase) {
+
   const cheerOffset = Math.sin(state.lastTime * 0.005 + phase) * 4;
   const point = projectPoint(x, y + cheerOffset, z);
   if (!point) {
@@ -822,6 +817,12 @@ function drawCar(car) {
 // object rather than state.ball.  This allows menu rendering to show a
 // preview ball without mutating global state or causing flicker.
 function drawBallAt(ballObj) {
+  // we intentionally suppress auxiliary ball rendering while in menu mode
+  // to avoid the floating dot artifact that appears during UI interaction.
+  if (state.screen === "menu") {
+    return;
+  }
+
   // interpolate position/spin if prev values exist on the object
   let backup;
   const alpha = state.renderAlpha || 0;

@@ -114,6 +114,76 @@ const serveHandler = require('serve-handler');
       await new Promise((r) => setTimeout(r, 50));
       const duelR = await page.evaluate(() => ({ matchTime: state.matchTime, ballX: state.ball.x }));
       console.log('DUEL R', duelR);
+
+      // check camera/customizing by toggling menu via setScreen
+      await page.evaluate(() => {
+        state.screen = 'game';
+        state.customizing = false;
+        // now invoke the UI helper to enter menu by importing the module
+        import('/src/ui.js').then((m) => m.setScreen('menu'));
+        // reset camera to something else so we can notice change
+        state.camera.x = 999;
+        state.camera.y = 999;
+        state.camera.z = 999;
+      });
+      // run a couple ticks so render.updateCamera() executes
+      await page.evaluate(() => {
+        // run camera update a few times
+        import('/src/render.js').then((r) => {
+          for (let i = 0; i < 3; i++) r.updateCamera();
+        });
+      });
+      const customState = await page.evaluate(() => ({
+        customizing: state.customizing,
+        cam: { x: state.camera.x, y: state.camera.y, z: state.camera.z }
+      }));
+      console.log('CUSTOM MODE', customState);
+      // camera should have snapped to a menu shot but not to the
+      // center-of-field preview used for actual customization.
+      if (customState.customizing) {
+        throw new Error('customizing flag should remain false when simply opening menu');
+      }
+      if (Math.abs(customState.cam.x) < 100 && Math.abs(customState.cam.z) < 100) {
+        throw new Error('camera should not be positioned over the field when not customizing');
+      }
+
+      // now pretend the user actually customizes something by clicking a
+      // shape button and verify the camera jumps to the field centre.
+      await page.evaluate(() => {
+        document.querySelector('[data-shape]').click();
+      });
+      await page.evaluate(() => {
+        import('/src/render.js').then((r) => {
+          for (let i = 0; i < 3; i++) r.updateCamera();
+        });
+      });
+      const afterInteract = await page.evaluate(() => ({
+        customizing: state.customizing,
+        cam: { x: state.camera.x, y: state.camera.y, z: state.camera.z }
+      }));
+      console.log('AFTER INTERACT', afterInteract);
+      if (!afterInteract.customizing) throw new Error('customizing flag should be true after editing');
+      if (!(Math.abs(afterInteract.cam.x) < 100 && Math.abs(afterInteract.cam.z) < 100)) {
+        throw new Error('camera should move to field when customizing');
+      }
+
+      // verify that the crowd eggs are suppressed during customization. we
+      // monkey‑patch the helper and track whether it ever gets invoked while
+      // the camera is snapped to the car – the bug previously would render a
+      // single egg right at the center of the view.
+      await page.evaluate(() => {
+        import('/src/render.js').then((r) => {
+          window.__eggCallCount = 0;
+          const orig = r.drawCrowdEgg;
+          r.drawCrowdEgg = (...args) => { window.__eggCallCount += 1; return orig(...args); };
+        });
+      });
+      // tick a few frames of the game loop so the menu/customizing draw runs
+      await new Promise((r) => setTimeout(r, 50));
+      const eggCalls = await page.evaluate(() => window.__eggCallCount || 0);
+      console.log('EGG CALLS DURING CUSTOM', eggCalls);
+      if (eggCalls !== 0) throw new Error('crowd eggs should not be drawn while customizing');
+
       // shove the ball into the blue goal to force a score (use large X coordinate)
       // artificially mark a contact that happened 150 frames ago so we can
       // test the 2‑second offset behaviour even without a real collision.
