@@ -1,6 +1,7 @@
 import { FIELD, BALL_RADIUS, MATCH_LENGTH, MODES } from "./constants.js";
 import { createBoostPads, makeCar, kickoffSlots, createTeamCar } from "./entities.js";
 import { clamp, lerp, length } from "./utils.js";
+import { playSound } from "./audio.js";
 
 // this object holds the entire mutable game state; other modules import it by reference
 export const state = {
@@ -302,6 +303,8 @@ export function triggerGoalSequence(scoredByTeam, scorerId) {
     const dist = Math.sqrt(dx * dx + dz * dz);
     state.cameraShake = 3 + Math.max(0, 1 - dist / 5000) * 25;
   }
+  // Crowd cheer
+  playSound("crowd_cheer", { volume: 0.75 });
 }
 
 export function applyReplayFrame(frame) {

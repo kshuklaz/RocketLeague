@@ -5,6 +5,7 @@ import * as ui from "./ui.js";
 import * as input from "./input.js";
 import { MODES, FIELD } from "./constants.js";
 import { kickoffSlots } from "./entities.js";
+import { initAudio } from "./audio.js";
 
 const canvas = document.getElementById("game");
 render.initCanvas(canvas);
@@ -254,3 +255,8 @@ ui.updateCustomizationPreview();
 startMatch("duel");
 ui.setScreen("menu");
 requestAnimationFrame(frame);
+
+// Initialise the audio context on the first user gesture so browsers allow
+// sound playback without a "NotAllowedError" autoplay block.
+document.addEventListener("pointerdown", initAudio, { once: true });
+document.addEventListener("keydown",     initAudio, { once: true });
