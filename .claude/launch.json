@@ -4,7 +4,7 @@
     {
       "name": "rocket-league",
       "runtimeExecutable": "/usr/local/bin/node",
-      "runtimeArgs": ["-e", "require('serve-handler'); const http = require('http'); const handler = require('serve-handler'); const server = http.createServer((req,res)=>handler(req,res,{public:'.'})); server.listen(5678);"],
+      "runtimeArgs": ["-e", "const http = require('http'); const handler = require('serve-handler'); const server = http.createServer((req,res)=>{res.setHeader('Cache-Control','no-store');handler(req,res,{public:'.'});}); server.listen(5678);"],
       "port": 5678
     }
   ]
