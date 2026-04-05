@@ -5,7 +5,7 @@ import * as ui from "./ui.js";
 import * as input from "./input.js";
 import { MODES, FIELD } from "./constants.js";
 import { kickoffSlots } from "./entities.js";
-import { initAudio } from "./audio.js";
+import { initAudio, playSound } from "./audio.js";
 
 const canvas = document.getElementById("game");
 render.initCanvas(canvas);
@@ -98,7 +98,12 @@ function updateGame(dt) {
   }
 
   if (state.mode !== "freeplay" && state.kickoffTimer > 0) {
+    const prevKickoffTimer = state.kickoffTimer;
     state.kickoffTimer = Math.max(0, state.kickoffTimer - dt);
+    // Play countdown sound exactly once when the "3" banner first appears
+    if (prevKickoffTimer > 3 && state.kickoffTimer <= 3) {
+      playSound("kickoff_countdown", { volume: 0.8 });
+    }
     // use the UI helper so that the banner timer is refreshed each time we
     // change the text. this prevents situations where the timer has already
     // expired mid‑countdown (which could make the numbers disappear), and

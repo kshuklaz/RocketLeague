@@ -11,13 +11,13 @@
 // ── Sound registry ───────────────────────────────────────────────────────────
 // Add every game sound here.  Key = name used in playSound().
 export const SOUNDS = {
-  crowd_cheer: "sounds/crowd_cheer.mp3",
+  crowd_cheer:       "sounds/crowd_cheer.mp3",
+  kickoff_countdown: "sounds/kickoff_countdown.mp3",
   // Examples (uncomment + add file to sounds/):
   // boost:       "sounds/boost.mp3",
   // hit:         "sounds/hit.mp3",
   // goal_horn:   "sounds/goal_horn.mp3",
   // jump:        "sounds/jump.mp3",
-  // countdown:   "sounds/countdown.mp3",
 };
 
 // ── Preload ──────────────────────────────────────────────────────────────────
