@@ -282,8 +282,9 @@ export function triggerGoalSequence(scoredByTeam, scorerId) {
   state.replayGoalFrame = Math.max(0, state.replayFrames.length - 1);
   state.replayGoalSeenTimer = -1;
   state.replayCursor = Math.max(0, state.replayContactFrame - 120);
-  // Small buffer after the replay cursor hits the goal frame.
-  state.replayTimer = 0.6;
+  // Buffer after the replay cursor hits the goal frame — long enough for
+  // the centre-stadium camera to finish panning AND hold the view for a beat.
+  state.replayTimer = 4.0;
   state.message = `${scoredByTeam === "blue" ? "Blue" : "Orange"} scored`;
   state.messageTimer = 180;
   // Clear pre-existing particles then immediately spawn the live goal explosion
@@ -315,6 +316,43 @@ export function applyReplayFrame(frame) {
     }
   }
   Object.assign(state.ball, frame.ball);
+}
+
+export function applyReplayFrameLerped(frameA, frameB, t) {
+  if (!frameA) return;
+  if (!frameB) frameB = frameA;
+
+  for (const savedA of frameA.cars) {
+    const savedB = frameB.cars.find((c) => c.id === savedA.id) || savedA;
+    const live = getCarById(savedA.id);
+    if (live) {
+      live.x = lerp(savedA.x, savedB.x, t);
+      live.y = lerp(savedA.y, savedB.y, t);
+      live.z = lerp(savedA.z, savedB.z, t);
+      live.vx = lerp(savedA.vx, savedB.vx, t);
+      live.vy = lerp(savedA.vy, savedB.vy, t);
+      live.vz = lerp(savedA.vz, savedB.vz, t);
+      // shortest-path angle interpolation to avoid spin artifacts
+      let angleDiff = savedB.angle - savedA.angle;
+      while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+      while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+      live.angle = savedA.angle + angleDiff * t;
+      live.boost = lerp(savedA.boost, savedB.boost, t);
+      live.isBoosting = savedA.isBoosting;
+      live.bodyStyle = savedA.bodyStyle;
+      live.color = savedA.color;
+      live.boostColor = savedA.boostColor;
+      live.wheelColor = savedA.wheelColor;
+    }
+  }
+
+  state.ball.x = lerp(frameA.ball.x, frameB.ball.x, t);
+  state.ball.y = lerp(frameA.ball.y, frameB.ball.y, t);
+  state.ball.z = lerp(frameA.ball.z, frameB.ball.z, t);
+  state.ball.vx = lerp(frameA.ball.vx, frameB.ball.vx, t);
+  state.ball.vy = lerp(frameA.ball.vy, frameB.ball.vy, t);
+  state.ball.vz = lerp(frameA.ball.vz, frameB.ball.vz, t);
+  state.ball.spin = lerp(frameA.ball.spin, frameB.ball.spin, t);
 }
 
 export function resetAfterGoal() {

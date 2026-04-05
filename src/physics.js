@@ -26,12 +26,22 @@ export function updateCar(car, throttle, steering, useBoost, jumpPressed, dt) {
   if (car.controlled) {
     if (boosting) {
       car.boostHeldTime = (car.boostHeldTime || 0) + dt;
-      if (car.boostHeldTime >= 2.0) car.isSuperSonic = true;
+      if (car.boostHeldTime >= 1.5) car.isSuperSonic = true;
     } else {
       car.boostHeldTime = 0;
+      // Turning without boost immediately kills supersonic
+      if (car.isSuperSonic && Math.abs(steering) > 0) {
+        car.isSuperSonic = false;
+      }
     }
   }
-  const maxSpeed = car.isSuperSonic ? 1700 : boosting ? 1200 : 1000;
+  // When boost is first pressed the cap immediately jumps to 1 400 (giving an
+  // instant punch), then ramps the remaining 300 units up to 1 700 over 1.5 s
+  // as the car builds toward supersonic.  AI cars keep a flat 1 200 boost cap.
+  const boostRamp = (car.controlled && boosting)
+    ? 400 + clamp((car.boostHeldTime || 0) / 1.5, 0, 1) * 300
+    : 0;
+  const maxSpeed = car.isSuperSonic ? 1700 : boosting ? 1000 + boostRamp : 1000;
 
   car.angle = normalizeAngle(car.angle + steering * turnRate * dt * (onGround ? 0.82 : 1));
   car.pitch = lerp(car.pitch, clamp(-throttle * 0.18 + car.vy * 0.0008, -0.35, 0.35), 0.12);
@@ -68,8 +78,11 @@ export function updateCar(car, throttle, steering, useBoost, jumpPressed, dt) {
     if (!hasInfiniteBoost(car)) {
       car.boost = max(0, car.boost - 30 * dt);
     }
-    car.vx += forwardX * 340 * dt;
-    car.vz += forwardZ * 340 * dt;
+    // Player gets stronger thrust so it actually pushes through the rising
+    // speed cap during the 2-second build-up.  AI keeps the original value.
+    const boostThrust = car.controlled ? 700 : 340;
+    car.vx += forwardX * boostThrust * dt;
+    car.vz += forwardZ * boostThrust * dt;
     if (onGround) {
       car.vy += 220 * dt;
     }

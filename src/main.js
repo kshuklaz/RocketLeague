@@ -1,4 +1,4 @@
-import { state, setupMatch, snapshotFrame, applyReplayFrame, resetAfterGoal, triggerGoalSequence, finishMatch, spawnGoalExplosion, getPlayerCar } from "./state.js";
+import { state, setupMatch, snapshotFrame, applyReplayFrame, applyReplayFrameLerped, resetAfterGoal, triggerGoalSequence, finishMatch, spawnGoalExplosion, getPlayerCar } from "./state.js";
 import * as physics from "./physics.js";
 import * as render from "./render.js";
 import * as ui from "./ui.js";
@@ -28,7 +28,14 @@ function updateGame(dt) {
       state.goalFreezeTimer = Math.max(0, state.goalFreezeTimer - dt);
       physics.updateParticles(dt);
     } else {
-      applyReplayFrame(state.replayFrames[Math.floor(state.replayCursor)]);
+      const cursorFloor = Math.floor(state.replayCursor);
+      const cursorCeil = Math.min(cursorFloor + 1, state.replayFrames.length - 1);
+      const cursorFrac = state.replayCursor - cursorFloor;
+      applyReplayFrameLerped(
+        state.replayFrames[cursorFloor],
+        state.replayFrames[cursorCeil],
+        cursorFrac
+      );
 
       // once the cursor reaches the goal frame we start a short timer so that
       // the camera can execute its zoom/out animation; the replay is not allowed

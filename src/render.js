@@ -12,6 +12,10 @@ let _cachedBasis = null;
 // Focal length — increases (narrows FOV) when supersonic for a speed-rush feel
 let _focalLength = 500;
 
+// Ball-cam smoothed orbit angle — tracks the car→ball angle using shortest-arc
+// interpolation so the camera never teleports or swings through the side view.
+let _ballCamAngle = 0;
+
 // Supersonic speed-line streaks — persistent so they animate smoothly
 function _makeStreak() {
   return {
@@ -1028,8 +1032,16 @@ export function drawOverlay() {
     ctx.fillText(state.bannerText, canvas.width / 2, 183);
   }
 
-  // ── Supersonic speed lines ────────────────────────────────────────────────
+  // ── Speed lines (three tiers) ─────────────────────────────────────────────
   // Only shown during live gameplay (not replay / menu / result).
+  //
+  //  Tier 1 — normal max speed (no boost, ~800–1 000 u/s):
+  //            faint white streaks, no vignette, no FOV change
+  //  Tier 2 — boosting but not yet supersonic (pre–2 s timer):
+  //            brighter streaks + slight tunnel vignette, still no FOV change
+  //  Tier 3 — supersonic (after 2 s boost hold):
+  //            full streaks, strong vignette, streaks move much faster,
+  //            camera FOV widens (handled in updateCamera above)
   const _playerCar = state.screen === "game" && state.replayTimer <= 0
     ? getPlayerCar()
     : null;
@@ -1039,50 +1051,69 @@ export function drawOverlay() {
       _playerCar.vy * _playerCar.vy +
       _playerCar.vz * _playerCar.vz
     );
-    // Intensity: 0 at 850 u/s, 1 at 1150 u/s (near max boost speed of 1200)
-    const intensity = clamp((spd - 850) / 300, 0, 1);
+    const isSuper   = _playerCar.isSuperSonic;
+    const isBoostUp = _playerCar.isBoosting && !isSuper; // boosting, timer not reached yet
 
-    // Always advance streaks so they never look frozen when speed kicks in.
-    const tickRate = 1 / 60;
+    // Per-tier intensities
+    const normalPhase = clamp((spd - 800) / 200, 0, 1);           // faint at 800–1 000
+    const boostPhase  = isBoostUp ? clamp((spd - 950) / 250, 0, 1) : 0;
+    const superPhase  = isSuper   ? clamp((spd - 1300) / 400, 0.4, 1) : 0;
+
+    // Draw intensity (alpha scale for streaks)
+    const drawIntensity = isSuper
+      ? superPhase                                // 40–100 %
+      : isBoostUp
+        ? 0.18 + boostPhase * 0.32               // 18–50 %
+        : normalPhase * 0.14;                     //  0–14 %
+
+    // Streak animation speed — much faster when supersonic
+    const streakSpeed = isSuper ? 2.4 : isBoostUp ? 0.85 : 0.22;
+
+    // Advance all streaks every frame (keeps them moving even at low intensity)
     for (const s of _speedStreaks) {
-      s.dist += tickRate * s.speed * (intensity > 0 ? 0.8 + intensity * 1.4 : 0.12);
+      s.dist += (1 / 60) * s.speed * streakSpeed;
       if (s.dist > 1) {
         Object.assign(s, _makeStreak());
         s.dist = 0;
       }
     }
 
-    if (intensity > 0) {
-      const cx = canvas.width  / 2;
-      const cy = canvas.height / 2;
-      // Diagonal of screen — lines can reach any corner from centre
+    if (drawIntensity > 0.01) {
+      const cx   = canvas.width  / 2;
+      const cy   = canvas.height / 2;
       const maxR = Math.hypot(canvas.width, canvas.height) * 0.55;
-      const minR = maxR * 0.06; // small dead zone at the very centre
+      const minR = maxR * 0.06;
 
-      // Dark vignette at edges to sell the tunnel-vision speed feel
-      const vig = ctx.createRadialGradient(cx, cy, maxR * 0.38, cx, cy, maxR * 0.95);
-      vig.addColorStop(0, `rgba(0,6,20,0)`);
-      vig.addColorStop(1, `rgba(0,6,20,${(0.45 * intensity).toFixed(2)})`);
-      ctx.fillStyle = vig;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Tunnel vignette — none at tier-1, slight at tier-2, strong at tier-3
+      const vigAlpha = isSuper
+        ? (0.50 * superPhase).toFixed(2)
+        : isBoostUp
+          ? (0.18 * boostPhase).toFixed(2)
+          : "0";
+      if (Number(vigAlpha) > 0) {
+        const vig = ctx.createRadialGradient(cx, cy, maxR * 0.35, cx, cy, maxR * 0.95);
+        vig.addColorStop(0, `rgba(0,6,20,0)`);
+        vig.addColorStop(1, `rgba(0,6,20,${vigAlpha})`);
+        ctx.fillStyle = vig;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
 
       // Draw streaks
       ctx.save();
       ctx.lineCap = "round";
       for (const s of _speedStreaks) {
-        const r1 = minR + s.dist * (maxR - minR);
-        const r2 = Math.min(r1 + s.len * (maxR - minR), maxR);
-        // Fade in from centre, fade out at edge
-        const fade = Math.sin(clamp(s.dist, 0, 1) * Math.PI);
-        const a = (s.alpha * intensity * fade).toFixed(3);
+        const r1   = minR + s.dist * (maxR - minR);
+        const r2   = Math.min(r1 + s.len * (maxR - minR), maxR);
+        const fade = Math.sin(clamp(s.dist, 0, 1) * Math.PI); // fade in+out along path
+        const a    = (s.alpha * drawIntensity * fade).toFixed(3);
         if (Number(a) < 0.01) continue;
         const cos = Math.cos(s.angle);
         const sin = Math.sin(s.angle);
         ctx.beginPath();
         ctx.moveTo(cx + cos * r1, cy + sin * r1);
         ctx.lineTo(cx + cos * r2, cy + sin * r2);
-        ctx.strokeStyle = `rgba(185,220,255,${a})`;
-        ctx.lineWidth = s.width * intensity;
+        ctx.strokeStyle = `rgba(220,235,255,${a})`;
+        ctx.lineWidth = s.width * clamp(drawIntensity * 1.4, 0.3, 1.5);
         ctx.stroke();
       }
       ctx.restore();
@@ -1191,10 +1222,11 @@ export function snapCameraToGameStart() {
 }
 
 export function updateCamera() {
-  // Narrow FOV (higher focal) while supersonic; restore smoothly when not.
+  // Widen FOV (lower focal) while supersonic — makes the car look like it's
+  // punching through space. Pre-supersonic boost leaves FOV unchanged at 500.
   const _fovCar = getPlayerCar();
-  const _targetFocal = _fovCar && _fovCar.isSuperSonic ? 620 : 500;
-  _focalLength = lerp(_focalLength, _targetFocal, 0.06);
+  const _targetFocal = _fovCar && _fovCar.isSuperSonic ? 400 : 500;
+  _focalLength = lerp(_focalLength, _targetFocal, 0.05);
 
   if (state.screen === "menu") {
     state.menuOrbit += 0.0025;
@@ -1324,19 +1356,39 @@ export function updateCamera() {
   let orbitDiff = ballOrbitAngle - carSideAngle;
   while (orbitDiff > Math.PI) orbitDiff -= 2 * Math.PI;
   while (orbitDiff < -Math.PI) orbitDiff += 2 * Math.PI;
+
+  // Ball-cam: orbit the camera to the OPPOSITE side of the car from the ball
+  // so the car is always visible in the lower-center of the frame.
+  // We track the car→ball angle through a smoothed module-level variable using
+  // shortest-arc interpolation — this prevents the camera from swinging through
+  // the side-of-car position whenever the angle needs to flip 180°.
+  const usingBallCam = state.ballCam && !isReplay;
+  if (usingBallCam) {
+    let angleDiff = carToBallAngle - _ballCamAngle;
+    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+    _ballCamAngle += angleDiff * 0.18;
+  } else {
+    // Keep in sync so there's no jump when ball cam is toggled on
+    _ballCamAngle = carToBallAngle;
+  }
   const anchorAngle = isReplay
     ? carSideAngle + orbitDiff * postContactPhase
-    : replayFocus.angle;
+    : usingBallCam
+      ? _ballCamAngle           // smoothed orbit: camera opposite ball, car in frame
+      : replayFocus.angle;      // normal cam: behind car based on heading
 
   // Follow distance: wide side shot punches in at contact, expands with ball after
   const carFollowDist = lerp(740, 390, contactZoom);
   const ballFollowDist = lerp(390, 630, clamp(postContactPhase * 2, 0, 1));
-  const followDistance = isReplay ? lerp(carFollowDist, ballFollowDist, postContactPhase) : 560;
+  const followDistance = isReplay ? lerp(carFollowDist, ballFollowDist, postContactPhase)
+    : usingBallCam ? 600 : 560;
 
   // Camera height: medium for side shot, dips at impact punch-in, rises after
   const carCamHeight = lerp(290, 195, contactZoom);
   const ballCamHeight = lerp(195, 330, postContactPhase);
-  const camHeight = isReplay ? lerp(carCamHeight, ballCamHeight, postContactPhase) : 220;
+  const camHeight = isReplay ? lerp(carCamHeight, ballCamHeight, postContactPhase)
+    : usingBallCam ? 240 : 220;
 
   const targetX = anchorX - Math.cos(anchorAngle) * followDistance;
   const targetY = camHeight + anchorY * 0.25;
@@ -1347,7 +1399,6 @@ export function updateCamera() {
   const midLookX = lerp(replayFocus.x, state.ball.x, 0.55);
   const midLookY = lerp(replayFocus.y, state.ball.y, 0.55) + 20;
   const midLookZ = lerp(replayFocus.z, state.ball.z, 0.55);
-  const usingBallCam = state.ballCam && !isReplay;
   let lookAheadX, lookAheadY, lookAheadZ;
   if (isReplay) {
     lookAheadX = lerp(midLookX, state.ball.x, postContactPhase);
