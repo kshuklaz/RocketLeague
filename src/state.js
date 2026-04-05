@@ -1,7 +1,7 @@
 import { FIELD, BALL_RADIUS, MATCH_LENGTH, MODES } from "./constants.js";
 import { createBoostPads, makeCar, kickoffSlots, createTeamCar } from "./entities.js";
 import { clamp, lerp, length } from "./utils.js";
-import { playSound } from "./audio.js";
+import { playSound, stopSound, fadeOut } from "./audio.js";
 
 // this object holds the entire mutable game state; other modules import it by reference
 export const state = {
@@ -45,6 +45,7 @@ export const state = {
   replayScorerId: null,
   replayTouchCursor: 0,
   goalFreezeTimer: 0,
+  crowdSoundHandle: null,   // HTMLAudioElement returned by playSound — stopped on reset
   ballCam: false,
   cameraShake: 0,
   message: "Build your car and hit play",
@@ -303,8 +304,9 @@ export function triggerGoalSequence(scoredByTeam, scorerId) {
     const dist = Math.sqrt(dx * dx + dz * dz);
     state.cameraShake = 3 + Math.max(0, 1 - dist / 5000) * 25;
   }
-  // Crowd cheer
-  playSound("crowd_cheer", { volume: 0.75 });
+  // Crowd cheer — loops for the entire goal sequence, stopped when play resumes
+  stopSound(state.crowdSoundHandle); // stop any previous cheer first
+  state.crowdSoundHandle = playSound("crowd_cheer", { volume: 0.75, loop: true });
 }
 
 export function applyReplayFrame(frame) {
@@ -359,6 +361,10 @@ export function applyReplayFrameLerped(frameA, frameB, t) {
 }
 
 export function resetAfterGoal() {
+  // Fade out crowd cheer as kickoff begins
+  fadeOut(state.crowdSoundHandle, 1.5);
+  state.crowdSoundHandle = null;
+
   const config = MODES[state.mode];
   const slots = {
     blue: kickoffSlots("blue", config.blue),
