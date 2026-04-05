@@ -1,4 +1,4 @@
-import { state, getPlayerCar } from "./state.js";
+import { state, getPlayerCar, getCarById } from "./state.js";
 import { FIELD, TIME_OF_DAY, BALL_RADIUS, BIG_PAD_VALUE, CAR_PRESETS, CAMERA_LERP } from "./constants.js";
 import { clamp, lerp, hexToRgba, shade, normalizeAngle } from "./utils.js";
 import { getRampHeightAt, makeCar } from "./entities.js";
@@ -8,6 +8,22 @@ let ctx = null;
 
 // cached camera basis to avoid recomputing for every projected point
 let _cachedBasis = null;
+
+// Focal length — increases (narrows FOV) when supersonic for a speed-rush feel
+let _focalLength = 500;
+
+// Supersonic speed-line streaks — persistent so they animate smoothly
+function _makeStreak() {
+  return {
+    angle: Math.random() * Math.PI * 2,
+    dist:  Math.random(),                       // 0..1 progress outward
+    speed: 0.3 + Math.random() * 0.7,
+    len:   0.05 + Math.random() * 0.13,
+    width: 0.4 + Math.random() * 1.6,
+    alpha: 0.2 + Math.random() * 0.55,
+  };
+}
+const _speedStreaks = Array.from({ length: 70 }, _makeStreak);
 export function updateBasis() {
   _cachedBasis = getCameraBasis();
 }
@@ -75,7 +91,7 @@ export function projectPoint(x, y, z) {
     return null;
   }
 
-  const focal = 500;
+  const focal = _focalLength;
   return {
     x: canvas.width / 2 + (rx / finalZ) * focal,
     y: canvas.height / 2 - (ry / finalZ) * focal,
@@ -179,14 +195,15 @@ export function makeRenderables() {
     }
     _renderables.push({ depth: worldDepth(state.ball.x, state.ball.y, state.ball.z), draw: drawBall });
   } else if (state.screen === "menu") {
-    // preview car
+    // preview car (keep as menu focal object)
     const previewCar = makeCar({
       id: "preview",
       name: "Preview",
       team: "blue",
       controlled: false,
-      x: 180,
-      z: 40,
+      // position on field
+      x: 0,
+      z: 0,
       angle: Math.PI * 0.92,
       color: state.custom.color,
       boostColor: state.custom.boostColor,
@@ -196,17 +213,10 @@ export function makeRenderables() {
     });
     _renderables.push({ depth: worldDepth(previewCar.x, 20, previewCar.z), draw: () => drawCar(previewCar) });
 
-    const menuBall = {
-      x: -60,
-      y: BALL_RADIUS,
-      z: -40,
-      spin: state.menuOrbit * 18,
-    };
-    // draw menu ball without touching state.ball
-    _renderables.push({
-      depth: worldDepth(menuBall.x, menuBall.y, menuBall.z),
-      draw: () => drawBallAt(menuBall),
-    });
+    // remove the menu preview ball to prevent the small 'popup dot' from
+    // appearing whenever menu controls are clicked.
+    // We keep full field+crowd/stands rendering in place for the animated menu.
+
   }
 
   for (const particle of state.particles) {
@@ -573,6 +583,7 @@ function drawStandBands(side) {
 }
 
 function drawCrowdEgg(x, y, z, color, phase) {
+
   const cheerOffset = Math.sin(state.lastTime * 0.005 + phase) * 4;
   const point = projectPoint(x, y + cheerOffset, z);
   if (!point) {
@@ -822,6 +833,12 @@ function drawCar(car) {
 // object rather than state.ball.  This allows menu rendering to show a
 // preview ball without mutating global state or causing flicker.
 function drawBallAt(ballObj) {
+  // we intentionally suppress auxiliary ball rendering while in menu mode
+  // to avoid the floating dot artifact that appears during UI interaction.
+  if (state.screen === "menu") {
+    return;
+  }
+
   // interpolate position/spin if prev values exist on the object
   let backup;
   const alpha = state.renderAlpha || 0;
@@ -847,30 +864,47 @@ function drawBallAt(ballObj) {
   const radius = BALL_RADIUS * point.scale * 1.8;
 
   if (backup) Object.assign(ballObj, backup);
-  const gradient = ctx.createRadialGradient(point.x - radius * 0.35, point.y - radius * 0.35, radius * 0.2, point.x, point.y, radius);
-  gradient.addColorStop(0, "#ffffff");
-  gradient.addColorStop(0.6, "#dbe7f5");
-  gradient.addColorStop(1, "#94a3b8");
+  renderSphericalBall(point, radius);
 }
 
-function drawBallPattern(point, radius, spin) {
-  // spin passed in so rendering of menu ball doesn’t depend on state.ball
+function renderSphericalBall(point, radius) {
+  // Three-layer sphere shading that gives a convincing 3-D look on a 2-D canvas.
+  // Light source is upper-left, matching the arena lighting.
   ctx.save();
-  ctx.translate(point.x, point.y);
-  ctx.rotate(spin);
-  ctx.strokeStyle = "rgba(51,65,85,0.75)";
-  ctx.lineWidth = Math.max(1, radius * 0.1);
-  for (let i = -1; i <= 1; i += 1) {
-    ctx.beginPath();
-    ctx.ellipse(0, 0, radius * (0.8 - Math.abs(i) * 0.18), radius * 0.96, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.rotate(Math.PI / 2.35);
-  for (let i = -1; i <= 1; i += 1) {
-    ctx.beginPath();
-    ctx.ellipse(0, 0, radius * (0.8 - Math.abs(i) * 0.18), radius * 0.96, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+
+  // Layer 1 – diffuse shading: bright lit face fading to a dark limb
+  const hx = point.x - radius * 0.3;
+  const hy = point.y - radius * 0.35;
+  const diffuse = ctx.createRadialGradient(hx, hy, radius * 0.05, point.x, point.y, radius);
+  diffuse.addColorStop(0,   "#e4eef8");   // bright lit hemisphere
+  diffuse.addColorStop(0.5, "#b0c8de");   // mid-tone
+  diffuse.addColorStop(1,   "#243c52");   // dark limb
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = diffuse;
+  ctx.fill();
+
+  // Layer 2 – rim darkening: makes the silhouette edge look curved (Fresnel-like)
+  const rim = ctx.createRadialGradient(point.x, point.y, radius * 0.55, point.x, point.y, radius);
+  rim.addColorStop(0, "rgba(0,0,0,0)");
+  rim.addColorStop(1, "rgba(0,0,0,0.52)");
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = rim;
+  ctx.fill();
+
+  // Layer 3 – specular highlight: sharp glossy spot near the light source
+  const sx = point.x - radius * 0.27;
+  const sy = point.y - radius * 0.31;
+  const spec = ctx.createRadialGradient(sx, sy, 0, sx, sy, radius * 0.44);
+  spec.addColorStop(0,    "rgba(255,255,255,0.94)");
+  spec.addColorStop(0.22, "rgba(255,255,255,0.55)");
+  spec.addColorStop(1,    "rgba(255,255,255,0)");
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = spec;
+  ctx.fill();
+
   ctx.restore();
 }
 
@@ -901,18 +935,7 @@ function drawBall() {
 
   // restore original ball state if we temporarily interpolated it
   if (backup) Object.assign(state.ball, backup);
-  const gradient = ctx.createRadialGradient(point.x - radius * 0.35, point.y - radius * 0.35, radius * 0.2, point.x, point.y, radius);
-  gradient.addColorStop(0, "#ffffff");
-  gradient.addColorStop(0.6, "#dbe7f5");
-  gradient.addColorStop(1, "#94a3b8");
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-  ctx.fill();
-  drawBallPattern(point, radius, state.ball.spin);
-  ctx.strokeStyle = "rgba(71,85,105,0.9)";
-  ctx.lineWidth = Math.max(1, point.scale * 1.5);
-  ctx.stroke();
+  renderSphericalBall(point, radius);
 }
 
 function drawBoostPad(pad) {
@@ -1004,6 +1027,67 @@ export function drawOverlay() {
     ctx.font = "bold 56px Impact";
     ctx.fillText(state.bannerText, canvas.width / 2, 183);
   }
+
+  // ── Supersonic speed lines ────────────────────────────────────────────────
+  // Only shown during live gameplay (not replay / menu / result).
+  const _playerCar = state.screen === "game" && state.replayTimer <= 0
+    ? getPlayerCar()
+    : null;
+  if (_playerCar) {
+    const spd = Math.sqrt(
+      _playerCar.vx * _playerCar.vx +
+      _playerCar.vy * _playerCar.vy +
+      _playerCar.vz * _playerCar.vz
+    );
+    // Intensity: 0 at 850 u/s, 1 at 1150 u/s (near max boost speed of 1200)
+    const intensity = clamp((spd - 850) / 300, 0, 1);
+
+    // Always advance streaks so they never look frozen when speed kicks in.
+    const tickRate = 1 / 60;
+    for (const s of _speedStreaks) {
+      s.dist += tickRate * s.speed * (intensity > 0 ? 0.8 + intensity * 1.4 : 0.12);
+      if (s.dist > 1) {
+        Object.assign(s, _makeStreak());
+        s.dist = 0;
+      }
+    }
+
+    if (intensity > 0) {
+      const cx = canvas.width  / 2;
+      const cy = canvas.height / 2;
+      // Diagonal of screen — lines can reach any corner from centre
+      const maxR = Math.hypot(canvas.width, canvas.height) * 0.55;
+      const minR = maxR * 0.06; // small dead zone at the very centre
+
+      // Dark vignette at edges to sell the tunnel-vision speed feel
+      const vig = ctx.createRadialGradient(cx, cy, maxR * 0.38, cx, cy, maxR * 0.95);
+      vig.addColorStop(0, `rgba(0,6,20,0)`);
+      vig.addColorStop(1, `rgba(0,6,20,${(0.45 * intensity).toFixed(2)})`);
+      ctx.fillStyle = vig;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw streaks
+      ctx.save();
+      ctx.lineCap = "round";
+      for (const s of _speedStreaks) {
+        const r1 = minR + s.dist * (maxR - minR);
+        const r2 = Math.min(r1 + s.len * (maxR - minR), maxR);
+        // Fade in from centre, fade out at edge
+        const fade = Math.sin(clamp(s.dist, 0, 1) * Math.PI);
+        const a = (s.alpha * intensity * fade).toFixed(3);
+        if (Number(a) < 0.01) continue;
+        const cos = Math.cos(s.angle);
+        const sin = Math.sin(s.angle);
+        ctx.beginPath();
+        ctx.moveTo(cx + cos * r1, cy + sin * r1);
+        ctx.lineTo(cx + cos * r2, cy + sin * r2);
+        ctx.strokeStyle = `rgba(185,220,255,${a})`;
+        ctx.lineWidth = s.width * intensity;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
 }
 
 // camera boundary clamping helper (moved from legacy code)
@@ -1054,12 +1138,15 @@ function getMenuShotTarget() {
         targetZ: 0,
       };
     case 2:
+      // goal-end shot: camera behind the orange goal looking across the pitch.
+      // replaces the old top-down shot whose steep elevation angle pushed the
+      // field geometry below the canvas bottom, leaving only sky + a tiny dot.
       return {
-        x: 0 + Math.cos(t * 0.8) * 1240,
-        y: 1240 + Math.sin(t * 1.2) * 60,
-        z: -40 + Math.sin(t * 0.8) * 900,
+        x: Math.sin(t * 0.9) * 780,
+        y: 440 + Math.sin(t * 1.1) * 22,
+        z: -(FIELD.halfDepth + 480) + Math.cos(t * 0.7) * 160,
         targetX: 0,
-        targetY: 120,
+        targetY: 80,
         targetZ: 0,
       };
     case 3:
@@ -1083,7 +1170,32 @@ function getMenuShotTarget() {
   }
 }
 
+// Snap the camera to the correct game-follow position immediately.
+// Called when a match starts so the camera doesn't drift in from the
+// far-away menu orbit position, which made the ball appear as a tiny dot.
+export function snapCameraToGameStart() {
+  const focus = getPlayerCar() || state.cars[0];
+  if (!focus) return;
+  const followDistance = 560;
+  const desiredX = focus.x - Math.cos(focus.angle) * followDistance;
+  const desiredY = 220 + focus.y * 0.25;
+  const desiredZ = focus.z - Math.sin(focus.angle) * followDistance;
+  const bounded = constrainCameraPosition(focus.x, focus.y, focus.z, desiredX, desiredY, desiredZ);
+  state.camera.x = bounded.x;
+  state.camera.y = bounded.y;
+  state.camera.z = bounded.z;
+  state.camera.targetX = focus.x + Math.cos(focus.angle) * 340;
+  state.camera.targetY = 20 + focus.y * 0.35;
+  state.camera.targetZ = focus.z + Math.sin(focus.angle) * 280;
+  _cachedBasis = null;
+}
+
 export function updateCamera() {
+  // Narrow FOV (higher focal) while supersonic; restore smoothly when not.
+  const _fovCar = getPlayerCar();
+  const _targetFocal = _fovCar && _fovCar.isSuperSonic ? 620 : 500;
+  _focalLength = lerp(_focalLength, _targetFocal, 0.06);
+
   if (state.screen === "menu") {
     state.menuOrbit += 0.0025;
     state.menuShotTimer += 1 / 60;
@@ -1122,35 +1234,130 @@ export function updateCamera() {
     return;
   }
 
+  // Goal freeze: pan to centre of the stadium and look straight at the scored goal.
+  if (state.replayTimer > 0 && state.goalFreezeTimer > 0) {
+    const goalX = state.replayGoal === "blue" ? FIELD.halfWidth : -FIELD.halfWidth;
+    state.camera.x = lerp(state.camera.x, 0, 0.07);
+    state.camera.y = lerp(state.camera.y, 560, 0.07);
+    state.camera.z = lerp(state.camera.z, 900, 0.07);
+    state.camera.targetX = lerp(state.camera.targetX, goalX, 0.09);
+    state.camera.targetY = lerp(state.camera.targetY, 160, 0.09);
+    state.camera.targetZ = lerp(state.camera.targetZ, 0, 0.09);
+    // Apply shake during the freeze phase too.
+    if (state.cameraShake > 0.1) {
+      const shakeAngle = Math.random() * Math.PI * 2;
+      state.camera.x += Math.cos(shakeAngle) * state.cameraShake;
+      state.camera.y += (Math.random() - 0.5) * state.cameraShake * 0.5;
+      state.camera.z += Math.sin(shakeAngle) * state.cameraShake;
+      state.cameraShake *= 0.84;
+      _cachedBasis = null;
+    } else {
+      state.cameraShake = 0;
+    }
+    return;
+  }
+
   const isReplay = state.replayTimer > 0 && state.goalFreezeTimer <= 0;
-  const replayFocus = getPlayerCar() || state.cars[0];
+  // During a replay follow the scorer's car (pre-contact) so the camera
+  // tracks whoever hit the ball, not always the local player.
+  const scorerCar = isReplay && state.replayScorerId
+    ? getCarById(state.replayScorerId)
+    : null;
+  const replayFocus = scorerCar || getPlayerCar() || state.cars[0];
   if (!replayFocus) {
     return;
   }
 
-  const replayContactDelta = isReplay ? Math.abs(state.replayCursor - state.replayContactFrame) : Number.POSITIVE_INFINITY;
-  const contactZoom = isReplay ? clamp(1 - replayContactDelta / 26, 0, 1) : 0;
-  const replayGoalPhase = isReplay && state.replayGoalSeenTimer >= 0
-    ? clamp((state.replayGoalSeenTimer - 1) / 0.35, 0, 1)
-    : 0;
-  const followDistance = isReplay
-    ? lerp(lerp(600, 430, contactZoom), 1850, replayGoalPhase)
-    : 760;
+  // Once the ball has entered the net in the replay, switch to the same
+  // centre-stadium view used during the live goal-freeze phase.
+  if (isReplay && state.replayGoalSeenTimer >= 0) {
+    const goalX = state.replayGoal === "blue" ? FIELD.halfWidth : -FIELD.halfWidth;
+    state.camera.x = lerp(state.camera.x, 0, 0.09);
+    state.camera.y = lerp(state.camera.y, 560, 0.09);
+    state.camera.z = lerp(state.camera.z, 900, 0.09);
+    state.camera.targetX = lerp(state.camera.targetX, goalX, 0.11);
+    state.camera.targetY = lerp(state.camera.targetY, 160, 0.11);
+    state.camera.targetZ = lerp(state.camera.targetZ, 0, 0.11);
+    if (state.cameraShake > 0.1) {
+      const shakeAngle = Math.random() * Math.PI * 2;
+      state.camera.x += Math.cos(shakeAngle) * state.cameraShake;
+      state.camera.y += (Math.random() - 0.5) * state.cameraShake * 0.5;
+      state.camera.z += Math.sin(shakeAngle) * state.cameraShake;
+      state.cameraShake *= 0.84;
+      _cachedBasis = null;
+    } else {
+      state.cameraShake = 0;
+    }
+    return;
+  }
+
+  // postContactPhase: 0 = side camera on scorer car, 1 = camera orbiting ball.
+  const postContactPhase = isReplay
+    ? clamp((state.replayCursor - state.replayContactFrame) / 30, 0, 1)
+    : 1;
+
+  // contactZoom: 1 exactly at the contact frame, 0 beyond 22 frames away.
+  // Drives both the camera punch-in and the slo-mo effect.
+  const replayContactDelta = isReplay
+    ? Math.abs(state.replayCursor - state.replayContactFrame)
+    : Number.POSITIVE_INFINITY;
+  const contactZoom = isReplay ? clamp(1 - replayContactDelta / 22, 0, 1) : 0;
+
+  // Anchor position: follow car before contact, ball after.
+  const anchorX = isReplay ? lerp(replayFocus.x, state.ball.x, postContactPhase) : replayFocus.x;
+  const anchorY = isReplay ? lerp(replayFocus.y, state.ball.y, postContactPhase) : replayFocus.y;
+  const anchorZ = isReplay ? lerp(replayFocus.z, state.ball.z, postContactPhase) : replayFocus.z;
+
+  // Pre-contact: side camera perpendicular to the car→ball approach vector so
+  // the car sweeps across frame rather than driving straight at the lens.
+  const carToBallAngle = Math.atan2(
+    state.ball.z - replayFocus.z,
+    state.ball.x - replayFocus.x
+  );
+  const carSideAngle = carToBallAngle + Math.PI * 0.5;
+
+  // Post-contact: cinematic orbit around ball's velocity direction
   const replayHeading = Math.atan2(state.ball.vz || 0.01, state.ball.vx || 0.01);
-  const anchorAngle = isReplay ? replayHeading + Math.PI * 0.72 : replayFocus.angle;
-  const anchorX = isReplay ? lerp(state.ball.x, 0, replayGoalPhase) : replayFocus.x;
-  const anchorY = isReplay ? lerp(state.ball.y, 120, replayGoalPhase) : replayFocus.y;
-  const anchorZ = isReplay ? lerp(state.ball.z, 0, replayGoalPhase) : replayFocus.z;
+  const ballOrbitAngle = replayHeading + Math.PI * 0.72;
+
+  // Shortest-arc lerp between side angle and ball-orbit angle
+  let orbitDiff = ballOrbitAngle - carSideAngle;
+  while (orbitDiff > Math.PI) orbitDiff -= 2 * Math.PI;
+  while (orbitDiff < -Math.PI) orbitDiff += 2 * Math.PI;
+  const anchorAngle = isReplay
+    ? carSideAngle + orbitDiff * postContactPhase
+    : replayFocus.angle;
+
+  // Follow distance: wide side shot punches in at contact, expands with ball after
+  const carFollowDist = lerp(740, 390, contactZoom);
+  const ballFollowDist = lerp(390, 630, clamp(postContactPhase * 2, 0, 1));
+  const followDistance = isReplay ? lerp(carFollowDist, ballFollowDist, postContactPhase) : 560;
+
+  // Camera height: medium for side shot, dips at impact punch-in, rises after
+  const carCamHeight = lerp(290, 195, contactZoom);
+  const ballCamHeight = lerp(195, 330, postContactPhase);
+  const camHeight = isReplay ? lerp(carCamHeight, ballCamHeight, postContactPhase) : 220;
+
   const targetX = anchorX - Math.cos(anchorAngle) * followDistance;
-  const targetY = (isReplay ? lerp(lerp(320, 250, contactZoom), 760, replayGoalPhase) : 290) + anchorY * 0.25;
-  const targetZ = anchorZ - Math.sin(anchorAngle) * followDistance * (1 - replayGoalPhase * 0.55);
-  const defaultLookAheadX = replayFocus.x + Math.cos(replayFocus.angle) * 340;
-  const defaultLookAheadY = 20 + replayFocus.y * 0.35;
-  const defaultLookAheadZ = replayFocus.z + Math.sin(replayFocus.angle) * 280;
+  const targetY = camHeight + anchorY * 0.25;
+  const targetZ = anchorZ - Math.sin(anchorAngle) * followDistance;
+
+  // Look-at: midpoint car→ball (keeps both in frame for the side shot),
+  // then shifts to pure ball-tracking post-contact.
+  const midLookX = lerp(replayFocus.x, state.ball.x, 0.55);
+  const midLookY = lerp(replayFocus.y, state.ball.y, 0.55) + 20;
+  const midLookZ = lerp(replayFocus.z, state.ball.z, 0.55);
   const usingBallCam = state.ballCam && !isReplay;
-  const lookAheadX = isReplay ? lerp(state.ball.x, 0, replayGoalPhase) : usingBallCam ? state.ball.x : defaultLookAheadX;
-  const lookAheadY = isReplay ? lerp(state.ball.y, 70, replayGoalPhase) : usingBallCam ? state.ball.y : defaultLookAheadY;
-  const lookAheadZ = isReplay ? lerp(state.ball.z, 0, replayGoalPhase) : usingBallCam ? state.ball.z : defaultLookAheadZ;
+  let lookAheadX, lookAheadY, lookAheadZ;
+  if (isReplay) {
+    lookAheadX = lerp(midLookX, state.ball.x, postContactPhase);
+    lookAheadY = lerp(midLookY, state.ball.y, postContactPhase);
+    lookAheadZ = lerp(midLookZ, state.ball.z, postContactPhase);
+  } else {
+    lookAheadX = usingBallCam ? state.ball.x : replayFocus.x + Math.cos(replayFocus.angle) * 340;
+    lookAheadY = usingBallCam ? state.ball.y : 20 + replayFocus.y * 0.35;
+    lookAheadZ = usingBallCam ? state.ball.z : replayFocus.z + Math.sin(replayFocus.angle) * 280;
+  }
   const boundedCamera = constrainCameraPosition(anchorX, anchorY, anchorZ, targetX, targetY, targetZ);
 
   state.camera.x = lerp(state.camera.x, boundedCamera.x, CAMERA_LERP);
@@ -1159,4 +1366,16 @@ export function updateCamera() {
   state.camera.targetX = lerp(state.camera.targetX, lookAheadX, CAMERA_LERP);
   state.camera.targetY = lerp(state.camera.targetY, lookAheadY, CAMERA_LERP);
   state.camera.targetZ = lerp(state.camera.targetZ, lookAheadZ, CAMERA_LERP);
+
+  // Camera shake — random offset each frame, amplitude decays quickly
+  if (state.cameraShake > 0.1) {
+    const shakeAngle = Math.random() * Math.PI * 2;
+    state.camera.x += Math.cos(shakeAngle) * state.cameraShake;
+    state.camera.y += (Math.random() - 0.5) * state.cameraShake * 0.5;
+    state.camera.z += Math.sin(shakeAngle) * state.cameraShake;
+    state.cameraShake *= 0.84; // decays to <1% in ~25 frames (~0.4 s at 60 fps)
+    _cachedBasis = null;
+  } else {
+    state.cameraShake = 0;
+  }
 }

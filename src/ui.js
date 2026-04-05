@@ -37,11 +37,13 @@ export const garageButton = document.getElementById("garageButton");
 
 export function setScreen(screen) {
   state.screen = screen;
-  const inGame = screen === "game";
+
   if (screen === "menu") {
     state.menuShot = 0;
     state.menuShotTimer = 0;
   }
+
+  const inGame = screen === "game";
   menuOverlayEl.classList.toggle("hidden", screen !== "menu");
   resultOverlayEl.classList.toggle("hidden", screen !== "result");
   gameHudEl.classList.toggle("hidden", !inGame);
