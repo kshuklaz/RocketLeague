@@ -1,9 +1,9 @@
-import { state, setupMatch, snapshotFrame, applyReplayFrame, resetAfterGoal, triggerGoalSequence, finishMatch } from "./state.js";
+import { state, setupMatch, snapshotFrame, applyReplayFrame, resetAfterGoal, triggerGoalSequence, finishMatch, spawnGoalExplosion, getPlayerCar } from "./state.js";
 import * as physics from "./physics.js";
 import * as render from "./render.js";
 import * as ui from "./ui.js";
 import * as input from "./input.js";
-import { MODES } from "./constants.js";
+import { MODES, FIELD } from "./constants.js";
 import { kickoffSlots } from "./entities.js";
 
 const canvas = document.getElementById("game");
@@ -39,12 +39,34 @@ function updateGame(dt) {
         if (state.replayGoalSeenTimer >= 0) {
           state.replayGoalSeenTimer += dt;
         } else {
+          // First frame the ball reaches the goal in the replay — spawn a fresh
+          // explosion so it appears exactly when the ball enters the net.
           state.replayGoalSeenTimer = 0;
+          state.particles = []; // clear freeze-phase particles for a clean replay explosion
+          const explosionX = state.replayGoal === "blue"
+            ? FIELD.halfWidth + 40
+            : -FIELD.halfWidth - 40;
+          spawnGoalExplosion(explosionX, state.ball.y, state.ball.z, state.replayGoal);
+          // Camera shake for the replay explosion too
+          const player = getPlayerCar() || state.cars[0];
+          if (player) {
+            const dx = explosionX - player.x;
+            const dz = -player.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            state.cameraShake = 3 + Math.max(0, 1 - dist / 5000) * 25;
+          }
         }
       }
 
       const replayContactDelta = Math.abs(state.replayCursor - state.replayContactFrame);
-      const baseSpeed = replayContactDelta < 20 ? 0.3 : replayContactDelta < 48 ? 0.6 : 1;
+      const afterContact = state.replayCursor > state.replayContactFrame;
+      // Asymmetric speed curve: gradual build-up before impact, slo-mo at
+      // the hit, then a quick ramp back to normal so the ball looks like it launches.
+      const baseSpeed = replayContactDelta < 6
+        ? 0.22                                                           // slo-mo at impact
+        : afterContact
+          ? (replayContactDelta < 20 ? 0.42 : 0.75)                     // ramp-up after hit
+          : (replayContactDelta < 25 ? 0.32 : replayContactDelta < 50 ? 0.55 : 0.82); // gradual approach
       const delta = baseSpeed;
       state.replayCursor = Math.min(state.replayFrames.length - 1, state.replayCursor + delta);
 
@@ -59,6 +81,10 @@ function updateGame(dt) {
       if (state.replayTimer === 0 && state.replayGoalSeenTimer >= 0) {
         resetAfterGoal();
       }
+
+      // Keep particles alive and moving during replay playback so the goal
+      // explosion actually animates instead of sitting frozen at spawn.
+      physics.updateParticles(dt);
     }
     return;
   }
@@ -143,7 +169,6 @@ function updateGame(dt) {
   }
 
   physics.updateParticles(dt);
-  snapshotFrame();
 }
 
 // fixed‑time physics loop with interpolation for smoother rendering
@@ -213,6 +238,7 @@ function frame(time) {
 function startMatch(mode) {
   setupMatch(mode);
   ui.setScreen("game");
+  render.snapCameraToGameStart();
 }
 
 input.initInputListeners();

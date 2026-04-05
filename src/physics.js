@@ -8,7 +8,7 @@ export function updateCar(car, throttle, steering, useBoost, jumpPressed, dt) {
   // local aliases for frequently used Math helpers
   const { cos, sin, sqrt, max } = Math;
 
-  const turnRate = 4.1;
+  const turnRate = 2.5;
   // raised acceleration and top speeds for a zippier feel
   const driveAccel = 1400;
   const reverseAccel = 800;
@@ -17,7 +17,21 @@ export function updateCar(car, throttle, steering, useBoost, jumpPressed, dt) {
   const lateralGrip = onGround ? 0.965 : 0.9;
   const boosting = useBoost && car.boost > 0;
   const accel = boosting ? 2200 : throttle >= 0 ? driveAccel : reverseAccel;
-  const maxSpeed = boosting ? 1200 : 1000;
+
+  // ── Supersonic mechanic (player car only) ───────────────────────────────
+  // Hold boost for 2 s → enter supersonic (1 700 u/s cap).
+  // Supersonic is maintained as long as the car stays above 1 300 u/s — so
+  // holding W alone can sustain it, but turning or releasing both inputs will
+  // bleed speed below the threshold and drop out of supersonic.
+  if (car.controlled) {
+    if (boosting) {
+      car.boostHeldTime = (car.boostHeldTime || 0) + dt;
+      if (car.boostHeldTime >= 2.0) car.isSuperSonic = true;
+    } else {
+      car.boostHeldTime = 0;
+    }
+  }
+  const maxSpeed = car.isSuperSonic ? 1700 : boosting ? 1200 : 1000;
 
   car.angle = normalizeAngle(car.angle + steering * turnRate * dt * (onGround ? 0.82 : 1));
   car.pitch = lerp(car.pitch, clamp(-throttle * 0.18 + car.vy * 0.0008, -0.35, 0.35), 0.12);
@@ -90,8 +104,19 @@ export function updateCar(car, throttle, steering, useBoost, jumpPressed, dt) {
   car.y += car.vy * dt;
   car.z += car.vz * dt;
 
+  const preClampX = car.x;
+  const preClampZ = car.z;
   car.x = clamp(car.x, -FIELD.halfWidth + CAR_RADIUS, FIELD.halfWidth - CAR_RADIUS);
   car.z = clamp(car.z, -FIELD.halfDepth + CAR_RADIUS, FIELD.halfDepth - CAR_RADIUS);
+  // Kill velocity into the wall so it doesn't linger as lateral drag when the
+  // car turns away — this is what made the car feel sluggish at edges/corners.
+  if (car.x !== preClampX) car.vx = 0;
+  if (car.z !== preClampZ) car.vz = 0;
+  // Wall hit immediately ends supersonic
+  if (car.controlled && (car.x !== preClampX || car.z !== preClampZ)) {
+    car.isSuperSonic = false;
+    car.boostHeldTime = 0;
+  }
 
   const rampHeight = getRampHeightAt(car.x, car.z, true);
   if (car.y <= rampHeight) {
@@ -101,6 +126,17 @@ export function updateCar(car, throttle, steering, useBoost, jumpPressed, dt) {
     }
     car.pitch = lerp(car.pitch, 0, 0.2);
     car.jumpsUsed = 0;
+  }
+
+  // Speed-based supersonic exit — turning / releasing W bleeds horizontal
+  // speed below this threshold and drops the car out of supersonic naturally.
+  // Threshold is 1 100 (just above normal drive cap of 1 000) so the car can
+  // enter supersonic at boost-cap speed (1 200) without immediately exiting.
+  if (car.isSuperSonic) {
+    const hSpeedSq = car.vx * car.vx + car.vz * car.vz;
+    if (hSpeedSq < 1100 * 1100) {
+      car.isSuperSonic = false;
+    }
   }
 }
 

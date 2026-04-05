@@ -45,6 +45,7 @@ export const state = {
   replayTouchCursor: 0,
   goalFreezeTimer: 0,
   ballCam: false,
+  cameraShake: 0,
   message: "Build your car and hit play",
   messageTimer: 180,
   bannerText: "",
@@ -107,6 +108,8 @@ export function resetCarsToKickoff(kickoffSlots) {
       angle: slot.angle,
       boost: 60,
       isBoosting: false,
+      isSuperSonic: false,
+      boostHeldTime: 0,
       pitch: 0,
       jumpsUsed: 0,
       jumpHeld: false,
@@ -125,6 +128,8 @@ export function resetCarsToKickoff(kickoffSlots) {
       angle: slot.angle,
       boost: 60,
       isBoosting: false,
+      isSuperSonic: false,
+      boostHeldTime: 0,
       pitch: 0,
       jumpsUsed: 0,
       jumpHeld: false,
@@ -207,64 +212,95 @@ export function snapshotFrame() {
 
 export function spawnGoalExplosion(x, y, z, scoredByTeam) {
   const color = scoredByTeam === "blue" ? "#38bdf8" : "#fb7185";
-  for (let i = 0; i < 180; i += 1) {
+  const baseY = Math.max(y, 24);
+
+  // Main spark burst — high-speed particles in all directions
+  for (let i = 0; i < 340; i += 1) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = 180 + Math.random() * 520;
+    const speed = 240 + Math.random() * 680;
     state.particles.push({
-      x,
-      y: Math.max(y, 24),
-      z,
+      x, y: baseY, z,
       vx: Math.cos(angle) * speed,
-      vy: -160 + Math.random() * 420,
+      vy: -200 + Math.random() * 520,
       vz: Math.sin(angle) * speed,
-      life: 0.7 + Math.random() * 0.9,
-      radius: 12 + Math.random() * 16,
+      life: 0.9 + Math.random() * 1.5,
+      radius: 14 + Math.random() * 26,
       color,
     });
   }
 
+  // Core fireballs — large glowing orbs that billow outward from the centre
+  for (let i = 0; i < 14; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 80 + Math.random() * 200;
+    state.particles.push({
+      x, y: baseY, z,
+      vx: Math.cos(angle) * speed,
+      vy: 40 + Math.random() * 160,
+      vz: Math.sin(angle) * speed,
+      life: 0.6 + Math.random() * 0.5,
+      radius: 38 + Math.random() * 28,
+      color,
+    });
+  }
+
+  // Upward column — concentrated vertical streak for height
+  for (let i = 0; i < 30; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 60 + Math.random() * 120;
+    state.particles.push({
+      x, y: baseY, z,
+      vx: Math.cos(angle) * speed,
+      vy: 380 + Math.random() * 420,
+      vz: Math.sin(angle) * speed,
+      life: 1.0 + Math.random() * 0.8,
+      radius: 18 + Math.random() * 18,
+      color,
+    });
+  }
+
+  // Blast force on nearby cars
+  const blastRadius = 680;
   for (const car of state.cars) {
     const dx = car.x - x;
     const dz = car.z - z;
-    let distSq = dx * dx + dz * dz;
-  const dist = Math.sqrt(distSq) || 1;
-    const blastRadius = 520;
-    if (dist > blastRadius) {
-      continue;
-    }
-    const force = (1 - dist / blastRadius) * 820;
+    const dist = Math.sqrt(dx * dx + dz * dz) || 1;
+    if (dist > blastRadius) continue;
+    const force = (1 - dist / blastRadius) * 1100;
     car.vx += (dx / dist) * force;
     car.vz += (dz / dist) * force;
-    car.vy += 140 + force * 0.08;
+    car.vy += 200 + force * 0.1;
   }
 }
 
 export function triggerGoalSequence(scoredByTeam, scorerId) {
   state.replayGoal = scoredByTeam;
   state.replayScorerId = scorerId;
-  state.goalFreezeTimer = 0.55;
-  // compute replay duration dynamically so playback always reaches the
-  // end regardless of how long the prerecorded frames are. add a small
-  // buffer for the goal freeze effect.
-  // when a goal occurs we want to play back from the last touch up to the
-  // moment the ball actually enters the net. previously we computed a timer
-  // based on the number of stored frames, but that could expire early when
-  // the replay was artificially slowed (for slow‑mo) and the cursor hadn’t yet
-  // reached the goal frame.  instead, treat the timer merely as a short
-  // post‑goal buffer and drive the end of the replay by the cursor hitting the
-  // goal frame.
+  // Extended freeze so the live explosion has time to play out before the replay starts.
+  state.goalFreezeTimer = 1.5;
   state.replayContactFrame = Math.min(state.replayTouchCursor, Math.max(0, state.replayFrames.length - 1));
   state.replayGoalFrame = Math.max(0, state.replayFrames.length - 1);
   state.replayGoalSeenTimer = -1;
-  // start two seconds before contact as before, but we will ignore the timer
-  // while the replay is moving toward the goal.
   state.replayCursor = Math.max(0, state.replayContactFrame - 120);
-  // small buffer after meeting the goal for the camera zoom effect
-  state.replayTimer = 0.6; // seconds of hang time once the goal frame has been seen
+  // Small buffer after the replay cursor hits the goal frame.
+  state.replayTimer = 0.6;
   state.message = `${scoredByTeam === "blue" ? "Blue" : "Orange"} scored`;
   state.messageTimer = 180;
-  const explosionX = scoredByTeam === "blue" ? FIELD.halfWidth + 40 : -FIELD.halfWidth - 40;
+  // Clear pre-existing particles then immediately spawn the live goal explosion
+  // so it fires the instant the ball enters the net during actual gameplay.
+  state.particles = [];
+  const explosionX = scoredByTeam === "blue"
+    ? FIELD.halfWidth + 40
+    : -FIELD.halfWidth - 40;
   spawnGoalExplosion(explosionX, state.ball.y, state.ball.z, scoredByTeam);
+  // Camera shake proportional to player’s distance from the goal.
+  const player = getPlayerCar() || state.cars[0];
+  if (player) {
+    const dx = explosionX - player.x;
+    const dz = explosionX > 0 ? -player.z : -player.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    state.cameraShake = 3 + Math.max(0, 1 - dist / 5000) * 25;
+  }
 }
 
 export function applyReplayFrame(frame) {
@@ -300,6 +336,7 @@ export function resetAfterGoal() {
   state.replayScorerId = null;
   state.replayTouchCursor = 0;
   state.goalFreezeTimer = 0;
+  state.cameraShake = 0;
   state.kickoffTimer = state.mode === "freeplay" ? 0 : 4;
   state.lastTouchId = null;
 }
@@ -320,6 +357,7 @@ export function respawnFreeplay() {
   state.replayScorerId = null;
   state.replayTouchCursor = 0;
   state.goalFreezeTimer = 0;
+  state.cameraShake = 0;
   // do not touch kickoffTimer, matchTime, scores, or car list
 }
 

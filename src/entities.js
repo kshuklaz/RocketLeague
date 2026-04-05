@@ -50,6 +50,8 @@ export function makeCar(options) {
     bodyStyle: options.bodyStyle,
     boost: options.boost ?? 40,
     isBoosting: false,
+    isSuperSonic: false,
+    boostHeldTime: 0,
     pitch: 0,
     jumpsUsed: 0,
     jumpHeld: false,
