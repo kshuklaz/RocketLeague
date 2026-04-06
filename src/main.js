@@ -1,6 +1,7 @@
 import { state, setupMatch, snapshotFrame, applyReplayFrame, applyReplayFrameLerped, resetAfterGoal, triggerGoalSequence, finishMatch, spawnGoalExplosion, getPlayerCar } from "./state.js";
 import * as physics from "./physics.js";
 import * as render from "./render.js";
+import { resetReplayDrone } from "./render.js";
 import * as ui from "./ui.js";
 import * as input from "./input.js";
 import { MODES, FIELD } from "./constants.js";
@@ -184,6 +185,7 @@ function updateGame(dt) {
   snapshotFrame();
   if (scoredTeam) {
     triggerGoalSequence(scoredTeam, state.lastTouchId || `${scoredTeam}-0`);
+    resetReplayDrone();
     return;
   }
 

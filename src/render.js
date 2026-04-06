@@ -17,6 +17,10 @@ let _focalLength = 500;
 // interpolation so the camera never teleports or swings through the side view.
 let _ballCamAngle = 0;
 
+// Replay drone: smoothed heading that follows the ball's travel direction very
+// lazily so wall-bounce reversals don't snap the camera.
+let _replayDroneAngle = 0;
+
 // Supersonic speed-line streaks — persistent so they animate smoothly
 function _makeStreak() {
   return {
@@ -40,6 +44,12 @@ export function initCanvas(c) {
 }
 
 export function getFocalLength() { return _focalLength; }
+
+export function resetReplayDrone() {
+  // Seed the drone angle from the ball's current velocity so the first frame
+  // of the replay has a sensible starting position rather than facing 0°.
+  _replayDroneAngle = Math.atan2(state.ball.vz || 0.01, state.ball.vx || 0.01);
+}
 
 export function drawCarModels() {
   renderCarModels(ctx, state.cars, state.camera, _focalLength);
@@ -1339,45 +1349,11 @@ export function updateCamera() {
     return;
   }
 
-  // postContactPhase: 0 = side camera on scorer car, 1 = camera orbiting ball.
-  const postContactPhase = isReplay
-    ? clamp((state.replayCursor - state.replayContactFrame) / 30, 0, 1)
-    : 1;
-
-  // contactZoom: 1 exactly at the contact frame, 0 beyond 22 frames away.
-  // Drives both the camera punch-in and the slo-mo effect.
-  const replayContactDelta = isReplay
-    ? Math.abs(state.replayCursor - state.replayContactFrame)
-    : Number.POSITIVE_INFINITY;
-  const contactZoom = isReplay ? clamp(1 - replayContactDelta / 22, 0, 1) : 0;
-
-  // Anchor position: follow car before contact, ball after.
-  const anchorX = isReplay ? lerp(replayFocus.x, state.ball.x, postContactPhase) : replayFocus.x;
-  const anchorY = isReplay ? lerp(replayFocus.y, state.ball.y, postContactPhase) : replayFocus.y;
-  const anchorZ = isReplay ? lerp(replayFocus.z, state.ball.z, postContactPhase) : replayFocus.z;
-
-  // Pre-contact: side camera perpendicular to the car→ball approach vector so
-  // the car sweeps across frame rather than driving straight at the lens.
+  // ── Normal (non-replay) camera ────────────────────────────────────────────
   const carToBallAngle = Math.atan2(
     state.ball.z - replayFocus.z,
     state.ball.x - replayFocus.x
   );
-  const carSideAngle = carToBallAngle + Math.PI * 0.5;
-
-  // Post-contact: cinematic orbit around ball's velocity direction
-  const replayHeading = Math.atan2(state.ball.vz || 0.01, state.ball.vx || 0.01);
-  const ballOrbitAngle = replayHeading + Math.PI * 0.72;
-
-  // Shortest-arc lerp between side angle and ball-orbit angle
-  let orbitDiff = ballOrbitAngle - carSideAngle;
-  while (orbitDiff > Math.PI) orbitDiff -= 2 * Math.PI;
-  while (orbitDiff < -Math.PI) orbitDiff += 2 * Math.PI;
-
-  // Ball-cam: orbit the camera to the OPPOSITE side of the car from the ball
-  // so the car is always visible in the lower-center of the frame.
-  // We track the car→ball angle through a smoothed module-level variable using
-  // shortest-arc interpolation — this prevents the camera from swinging through
-  // the side-of-car position whenever the angle needs to flip 180°.
   const usingBallCam = state.ballCam && !isReplay;
   if (usingBallCam) {
     let angleDiff = carToBallAngle - _ballCamAngle;
@@ -1385,64 +1361,68 @@ export function updateCamera() {
     while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
     _ballCamAngle += angleDiff * 0.18;
   } else {
-    // Keep in sync so there's no jump when ball cam is toggled on
     _ballCamAngle = carToBallAngle;
   }
-  const anchorAngle = isReplay
-    ? carSideAngle + orbitDiff * postContactPhase
-    : usingBallCam
-      ? _ballCamAngle           // smoothed orbit: camera opposite ball, car in frame
-      : replayFocus.angle;      // normal cam: behind car based on heading
 
-  // Follow distance: wide side shot punches in at contact, expands with ball after
-  const carFollowDist = lerp(740, 390, contactZoom);
-  const ballFollowDist = lerp(390, 630, clamp(postContactPhase * 2, 0, 1));
-  const followDistance = isReplay ? lerp(carFollowDist, ballFollowDist, postContactPhase)
-    : usingBallCam ? 600 : 560;
-
-  // Camera height: medium for side shot, dips at impact punch-in, rises after
-  const carCamHeight = lerp(290, 195, contactZoom);
-  const ballCamHeight = lerp(195, 330, postContactPhase);
-  const camHeight = isReplay ? lerp(carCamHeight, ballCamHeight, postContactPhase)
-    : usingBallCam ? 240 : 220;
-
-  const targetX = anchorX - Math.cos(anchorAngle) * followDistance;
-  const targetY = camHeight + anchorY * 0.25;
-  const targetZ = anchorZ - Math.sin(anchorAngle) * followDistance;
-
-  // Look-at: midpoint car→ball (keeps both in frame for the side shot),
-  // then shifts to pure ball-tracking post-contact.
-  const midLookX = lerp(replayFocus.x, state.ball.x, 0.55);
-  const midLookY = lerp(replayFocus.y, state.ball.y, 0.55) + 20;
-  const midLookZ = lerp(replayFocus.z, state.ball.z, 0.55);
-  let lookAheadX, lookAheadY, lookAheadZ;
-  if (isReplay) {
-    lookAheadX = lerp(midLookX, state.ball.x, postContactPhase);
-    lookAheadY = lerp(midLookY, state.ball.y, postContactPhase);
-    lookAheadZ = lerp(midLookZ, state.ball.z, postContactPhase);
-  } else {
-    lookAheadX = usingBallCam ? state.ball.x : replayFocus.x + Math.cos(replayFocus.angle) * 340;
-    lookAheadY = usingBallCam ? state.ball.y : 20 + replayFocus.y * 0.35;
-    lookAheadZ = usingBallCam ? state.ball.z : replayFocus.z + Math.sin(replayFocus.angle) * 280;
+  if (!isReplay) {
+    const followDistance = usingBallCam ? 600 : 560;
+    const camHeight = usingBallCam ? 240 : 220;
+    const angle = usingBallCam ? _ballCamAngle : replayFocus.angle;
+    const targetX = replayFocus.x - Math.cos(angle) * followDistance;
+    const targetY = camHeight + replayFocus.y * 0.25;
+    const targetZ = replayFocus.z - Math.sin(angle) * followDistance;
+    const lookAheadX = usingBallCam ? state.ball.x : replayFocus.x + Math.cos(replayFocus.angle) * 340;
+    const lookAheadY = usingBallCam ? state.ball.y : 20 + replayFocus.y * 0.35;
+    const lookAheadZ = usingBallCam ? state.ball.z : replayFocus.z + Math.sin(replayFocus.angle) * 280;
+    const bounded = constrainCameraPosition(replayFocus.x, replayFocus.y, replayFocus.z, targetX, targetY, targetZ);
+    state.camera.x = lerp(state.camera.x, bounded.x, CAMERA_LERP);
+    state.camera.y = lerp(state.camera.y, bounded.y, CAMERA_LERP);
+    state.camera.z = lerp(state.camera.z, bounded.z, CAMERA_LERP);
+    state.camera.targetX = lerp(state.camera.targetX, lookAheadX, CAMERA_LERP);
+    state.camera.targetY = lerp(state.camera.targetY, lookAheadY, CAMERA_LERP);
+    state.camera.targetZ = lerp(state.camera.targetZ, lookAheadZ, CAMERA_LERP);
+    if (state.cameraShake > 0.1) {
+      const shakeAngle = Math.random() * Math.PI * 2;
+      state.camera.x += Math.cos(shakeAngle) * state.cameraShake;
+      state.camera.y += (Math.random() - 0.5) * state.cameraShake * 0.5;
+      state.camera.z += Math.sin(shakeAngle) * state.cameraShake;
+      state.cameraShake *= 0.84;
+      _cachedBasis = null;
+    } else {
+      state.cameraShake = 0;
+    }
+    return;
   }
-  const boundedCamera = constrainCameraPosition(anchorX, anchorY, anchorZ, targetX, targetY, targetZ);
 
-  state.camera.x = lerp(state.camera.x, boundedCamera.x, CAMERA_LERP);
-  state.camera.y = lerp(state.camera.y, boundedCamera.y, CAMERA_LERP);
-  state.camera.z = lerp(state.camera.z, boundedCamera.z, CAMERA_LERP);
-  state.camera.targetX = lerp(state.camera.targetX, lookAheadX, CAMERA_LERP);
-  state.camera.targetY = lerp(state.camera.targetY, lookAheadY, CAMERA_LERP);
-  state.camera.targetZ = lerp(state.camera.targetZ, lookAheadZ, CAMERA_LERP);
-
-  // Camera shake — random offset each frame, amplitude decays quickly
-  if (state.cameraShake > 0.1) {
-    const shakeAngle = Math.random() * Math.PI * 2;
-    state.camera.x += Math.cos(shakeAngle) * state.cameraShake;
-    state.camera.y += (Math.random() - 0.5) * state.cameraShake * 0.5;
-    state.camera.z += Math.sin(shakeAngle) * state.cameraShake;
-    state.cameraShake *= 0.84; // decays to <1% in ~25 frames (~0.4 s at 60 fps)
-    _cachedBasis = null;
-  } else {
-    state.cameraShake = 0;
+  // ── Replay drone camera ───────────────────────────────────────────────────
+  // Floats behind-and-above the ball like a drone, always looking at the ball.
+  // _replayDroneAngle tracks the ball's travel heading with very lazy lerp so
+  // wall-bounce velocity reversals never snap the camera angle.
+  const ballSpeed = Math.sqrt(state.ball.vx * state.ball.vx + state.ball.vz * state.ball.vz);
+  if (ballSpeed > 30) {
+    // Only update heading when ball is actually moving — avoids jitter at rest
+    const ballHeading = Math.atan2(state.ball.vz, state.ball.vx);
+    let hdiff = ballHeading - _replayDroneAngle;
+    while (hdiff > Math.PI)  hdiff -= 2 * Math.PI;
+    while (hdiff < -Math.PI) hdiff += 2 * Math.PI;
+    _replayDroneAngle += hdiff * 0.025; // very lazy — smooth through bounces
   }
+
+  // Camera sits 550 units behind the ball (opposite to travel), 220 above
+  const droneDist = 550;
+  const droneHeight = 220;
+  const droneX = state.ball.x - Math.cos(_replayDroneAngle) * droneDist;
+  const droneY = state.ball.y + droneHeight;
+  const droneZ = state.ball.z - Math.sin(_replayDroneAngle) * droneDist;
+
+  // Use a slower lerp for replay so the camera drifts gently rather than snapping
+  const droneLerp = 0.045;
+  state.camera.x = lerp(state.camera.x, droneX, droneLerp);
+  state.camera.y = lerp(state.camera.y, droneY, droneLerp);
+  state.camera.z = lerp(state.camera.z, droneZ, droneLerp);
+  // Always look at the ball (with a tiny vertical offset so it's centred in frame)
+  state.camera.targetX = lerp(state.camera.targetX, state.ball.x, 0.07);
+  state.camera.targetY = lerp(state.camera.targetY, state.ball.y + 20, 0.07);
+  state.camera.targetZ = lerp(state.camera.targetZ, state.ball.z, 0.07);
+
 }
