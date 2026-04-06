@@ -261,7 +261,14 @@ startMatch("duel");
 ui.setScreen("menu");
 requestAnimationFrame(frame);
 
-// Initialise the audio context on the first user gesture so browsers allow
-// sound playback without a "NotAllowedError" autoplay block.
-document.addEventListener("pointerdown", initAudio, { once: true });
-document.addEventListener("keydown",     initAudio, { once: true });
+// On the first user gesture: satisfy the browser autoplay policy and kick off
+// the background crowd ambience that loops for the entire session.
+function _startAudio() {
+  initAudio();
+  // Start the crowd loop at quiet background volume; goals will bump it up.
+  if (!state.crowdSoundHandle) {
+    state.crowdSoundHandle = playSound("crowd_cheer", { volume: 0.25, loop: true });
+  }
+}
+document.addEventListener("pointerdown", _startAudio, { once: true });
+document.addEventListener("keydown",     _startAudio, { once: true });

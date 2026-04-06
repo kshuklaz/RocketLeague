@@ -1,7 +1,7 @@
 import { FIELD, BALL_RADIUS, MATCH_LENGTH, MODES } from "./constants.js";
 import { createBoostPads, makeCar, kickoffSlots, createTeamCar } from "./entities.js";
 import { clamp, lerp, length } from "./utils.js";
-import { playSound, stopSound, fadeOut } from "./audio.js";
+import { playSound } from "./audio.js";
 
 // this object holds the entire mutable game state; other modules import it by reference
 export const state = {
@@ -304,9 +304,8 @@ export function triggerGoalSequence(scoredByTeam, scorerId) {
     const dist = Math.sqrt(dx * dx + dz * dz);
     state.cameraShake = 3 + Math.max(0, 1 - dist / 5000) * 25;
   }
-  // Crowd cheer — loops for the entire goal sequence, stopped when play resumes
-  stopSound(state.crowdSoundHandle); // stop any previous cheer first
-  state.crowdSoundHandle = playSound("crowd_cheer", { volume: 0.75, loop: true });
+  // Crowd erupts on goal — just crank up the always-running background loop.
+  if (state.crowdSoundHandle) state.crowdSoundHandle.volume = 0.85;
 }
 
 export function applyReplayFrame(frame) {
@@ -361,9 +360,8 @@ export function applyReplayFrameLerped(frameA, frameB, t) {
 }
 
 export function resetAfterGoal() {
-  // Fade out crowd cheer as kickoff begins
-  fadeOut(state.crowdSoundHandle, 1.5);
-  state.crowdSoundHandle = null;
+  // Settle the crowd back to ambient level as kickoff begins
+  if (state.crowdSoundHandle) state.crowdSoundHandle.volume = 0.25;
 
   const config = MODES[state.mode];
   const slots = {
