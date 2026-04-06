@@ -9,7 +9,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 // ── Tuning ───────────────────────────────────────────────────────────────────
 // Scale the GLB to match game units (car body is ~56 units long in game).
 // Adjust if the model appears too big or too small.
-const CAR_MODEL_SCALE  = 0.47;
+const CAR_MODEL_SCALE  = 0.7;
 // Rotation offset applied on top of car.angle so the model faces forward.
 // 0 = model's default +Z aligns with game's forward direction.
 // Adjust by π/2 increments if the model faces the wrong way.

@@ -9,7 +9,7 @@ export const FIELD = {
   rampWidth: 315,
 };
 
-export const CAR_RADIUS = 24;
+export const CAR_RADIUS = 36;
 // make the ball larger to give it more presence and make collisions easier
 export const BALL_RADIUS = 24;
 export const SMALL_PAD_VALUE = 28;

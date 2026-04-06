@@ -770,11 +770,15 @@ function drawCarBody(car) {
 }
 
 function drawCarFlame(car) {
+  // For the GLB Octane the exhaust is further back; use a larger offset so the
+  // flame sits at the rear nozzle rather than floating above the bonnet.
+  const flameOffset = car.bodyStyle === "octane" ? 48 : 30;
+  const flameFar    = car.bodyStyle === "octane" ? 82 : 56;
   const flameY = 10 + car.y;
-  const back = projectPoint(car.x - Math.cos(car.angle) * 30, flameY, car.z - Math.sin(car.angle) * 30);
-  const far = projectPoint(car.x - Math.cos(car.angle) * 56, flameY, car.z - Math.sin(car.angle) * 56);
-  const left = projectPoint(car.x - Math.cos(car.angle) * 30 - Math.sin(car.angle) * 8, flameY, car.z - Math.sin(car.angle) * 30 + Math.cos(car.angle) * 8);
-  const right = projectPoint(car.x - Math.cos(car.angle) * 30 + Math.sin(car.angle) * 8, flameY, car.z - Math.sin(car.angle) * 30 - Math.cos(car.angle) * 8);
+  const back = projectPoint(car.x - Math.cos(car.angle) * flameOffset, flameY, car.z - Math.sin(car.angle) * flameOffset);
+  const far = projectPoint(car.x - Math.cos(car.angle) * flameFar, flameY, car.z - Math.sin(car.angle) * flameFar);
+  const left = projectPoint(car.x - Math.cos(car.angle) * flameOffset - Math.sin(car.angle) * 8, flameY, car.z - Math.sin(car.angle) * flameOffset + Math.cos(car.angle) * 8);
+  const right = projectPoint(car.x - Math.cos(car.angle) * flameOffset + Math.sin(car.angle) * 8, flameY, car.z - Math.sin(car.angle) * flameOffset - Math.cos(car.angle) * 8);
 
   if (!back || !far || !left || !right) {
     return;
