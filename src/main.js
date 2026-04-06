@@ -100,8 +100,10 @@ function updateGame(dt) {
   if (state.mode !== "freeplay" && state.kickoffTimer > 0) {
     const prevKickoffTimer = state.kickoffTimer;
     state.kickoffTimer = Math.max(0, state.kickoffTimer - dt);
-    // Play countdown sound exactly once when the "3" banner first appears
-    if (prevKickoffTimer > 3 && state.kickoffTimer <= 3) {
+    // Play countdown sound the instant the "3" banner first appears.
+    // The timer starts at 4 and counts down; "3" is displayed while it is
+    // in the (3, 4] window, so we fire on the first frame it drops below 4.
+    if (prevKickoffTimer >= 4 && state.kickoffTimer < 4) {
       playSound("kickoff_countdown", { volume: 0.8 });
     }
     // use the UI helper so that the banner timer is refreshed each time we
