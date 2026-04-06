@@ -304,8 +304,6 @@ export function triggerGoalSequence(scoredByTeam, scorerId) {
     const dist = Math.sqrt(dx * dx + dz * dz);
     state.cameraShake = 3 + Math.max(0, 1 - dist / 5000) * 25;
   }
-  // Crowd erupts on goal — just crank up the always-running background loop.
-  if (state.crowdSoundHandle) state.crowdSoundHandle.volume = 0.85;
   // Blast the goal explosion sound
   playSound("goal_explosion", { volume: 1.0 });
 }
@@ -362,8 +360,6 @@ export function applyReplayFrameLerped(frameA, frameB, t) {
 }
 
 export function resetAfterGoal() {
-  // Settle the crowd back to ambient level as kickoff begins
-  if (state.crowdSoundHandle) state.crowdSoundHandle.volume = 0.25;
 
   const config = MODES[state.mode];
   const slots = {
