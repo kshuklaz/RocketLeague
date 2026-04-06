@@ -5,6 +5,7 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { state } from "./state.js";
 
 // ── Tuning ───────────────────────────────────────────────────────────────────
 // Scale the GLB to match game units (car body is ~56 units long in game).
@@ -130,8 +131,20 @@ export function renderCarModels(ctx, cars, camState, focalLen) {
       _carMeshes.set(car.id, entry);
     }
 
-    entry.mesh.position.set(car.x, car.y + cfg.yOffset, car.z);
-    entry.mesh.rotation.y = -car.angle + cfg.rotOffset;
+    // Interpolate between the previous and current physics positions using
+    // renderAlpha (same as the 2D drawCar does) so the model moves smoothly
+    // between fixed timesteps instead of stuttering once per physics tick.
+    const a = state.renderAlpha || 0;
+    const rx = car.prevX !== undefined ? car.prevX + (car.x - car.prevX) * a : car.x;
+    const ry = car.prevY !== undefined ? car.prevY + (car.y - car.prevY) * a : car.y;
+    const rz = car.prevZ !== undefined ? car.prevZ + (car.z - car.prevZ) * a : car.z;
+    let da = car.angle - (car.prevAngle ?? car.angle);
+    while (da > Math.PI)  da -= 2 * Math.PI;
+    while (da < -Math.PI) da += 2 * Math.PI;
+    const ra = (car.prevAngle ?? car.angle) + da * a;
+
+    entry.mesh.position.set(rx, ry + cfg.yOffset, rz);
+    entry.mesh.rotation.y = -ra + cfg.rotOffset;
     hasVisible = true;
   }
 
