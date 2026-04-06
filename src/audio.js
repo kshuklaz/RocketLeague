@@ -132,7 +132,7 @@ export function fadeOut(handle, seconds = 0.5) {
 // stopBoostSound(h)  → fades out and cleans up
 
 const _BOOST_BASE  = 90;   // Hz — base frequency of osc1
-const _BOOST_CYCLE = 2.2;  // seconds per octave sweep
+const _BOOST_CYCLE = 6.0;  // seconds per octave sweep
 
 function _scheduleBoostCycles(osc1, g1, osc2, g2, from, n) {
   for (let i = 0; i < n; i++) {
