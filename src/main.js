@@ -5,7 +5,7 @@ import * as ui from "./ui.js";
 import * as input from "./input.js";
 import { MODES, FIELD } from "./constants.js";
 import { kickoffSlots } from "./entities.js";
-import { initAudio, playSound } from "./audio.js";
+import { initAudio, playSound, startBoostSound, stopBoostSound } from "./audio.js";
 
 const canvas = document.getElementById("game");
 render.initCanvas(canvas);
@@ -252,6 +252,17 @@ function frame(time) {
     render.drawFieldLines();
   }
   ui.syncHud();
+
+  // ── Boost sound ────────────────────────────────────────────────────────────
+  const _boostCar = getPlayerCar();
+  const _boosting = state.screen === "game" && state.replayTimer <= 0
+    && _boostCar && _boostCar.isBoosting;
+  if (_boosting && !state.boostSoundHandle) {
+    state.boostSoundHandle = startBoostSound();
+  } else if (!_boosting && state.boostSoundHandle) {
+    stopBoostSound(state.boostSoundHandle);
+    state.boostSoundHandle = null;
+  }
 
   requestAnimationFrame(frame);
 }

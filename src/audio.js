@@ -117,3 +117,92 @@ export function fadeOut(handle, seconds = 0.5) {
   handle.gain.gain.setTargetAtTime(0, ctx.currentTime, seconds / 3);
   setTimeout(() => stopSound(handle), (seconds + 0.2) * 1000);
 }
+
+// ── Synthesized boost sound ──────────────────────────────────────────────────
+// Built entirely from Web Audio primitives — no audio file needed.
+// Two layers:
+//   1. Jet startup: oscillator that sweeps from 80 Hz → 320 Hz over 0.35s
+//      then holds as a low rumble, shaped by a distortion waveshaper for grit
+//   2. Whoosh: bandpass-filtered white noise that swells in and sustains,
+//      giving the high-frequency "rush of air" feel
+//
+// startBoostSound() → returns a handle with a .stop() method
+// stopBoostSound(handle) → fades both layers out cleanly
+
+export function startBoostSound() {
+  const ctx = _getCtx();
+  if (ctx.state === "suspended") ctx.resume();
+  const t = ctx.currentTime;
+
+  // ── Master output gain (for fade-out on stop) ────────────────────────────
+  const masterGain = ctx.createGain();
+  masterGain.gain.setValueAtTime(0, t);
+  masterGain.gain.linearRampToValueAtTime(0.55, t + 0.18); // quick attack
+  masterGain.connect(ctx.destination);
+
+  // ── Layer 1: jet rumble oscillator ───────────────────────────────────────
+  const osc = ctx.createOscillator();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(80, t);
+  osc.frequency.exponentialRampToValueAtTime(320, t + 0.35); // startup sweep
+  osc.frequency.setTargetAtTime(210, t + 0.35, 0.4);         // settle to rumble
+
+  // Waveshaper adds overtones/crunch so it sounds like a jet rather than a tone
+  const waveShaper = ctx.createWaveShaper();
+  const curve = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const x = (i * 2) / 256 - 1;
+    curve[i] = (Math.PI + 340) * x / (Math.PI + 340 * Math.abs(x));
+  }
+  waveShaper.curve = curve;
+
+  const oscGain = ctx.createGain();
+  oscGain.gain.value = 0.6;
+
+  osc.connect(waveShaper);
+  waveShaper.connect(oscGain);
+  oscGain.connect(masterGain);
+  osc.start(t);
+
+  // ── Layer 2: whoosh (bandpass noise) ─────────────────────────────────────
+  // Create a white-noise buffer (1 second, looped)
+  const bufLen = ctx.sampleRate;
+  const noiseBuf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = noiseBuf;
+  noise.loop = true;
+
+  // Bandpass centred on ~1 800 Hz — the "air rush" frequency band
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.setValueAtTime(600, t);
+  bp.frequency.exponentialRampToValueAtTime(1800, t + 0.3); // sweeps up on startup
+  bp.frequency.setTargetAtTime(1400, t + 0.3, 0.5);
+  bp.Q.value = 1.2;
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0, t);
+  noiseGain.gain.linearRampToValueAtTime(0.45, t + 0.25); // whoosh swells in
+
+  noise.connect(bp);
+  bp.connect(noiseGain);
+  noiseGain.connect(masterGain);
+  noise.start(t);
+
+  return { osc, noise, masterGain };
+}
+
+export function stopBoostSound(handle) {
+  if (!handle) return;
+  const ctx = _getCtx();
+  const t = ctx.currentTime;
+  // Fade master gain out over 0.3s, then stop sources
+  handle.masterGain.gain.setTargetAtTime(0, t, 0.1);
+  setTimeout(() => {
+    try { handle.osc.stop(); }   catch { /* already stopped */ }
+    try { handle.noise.stop(); } catch { /* already stopped */ }
+  }, 400);
+}

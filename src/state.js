@@ -45,7 +45,8 @@ export const state = {
   replayScorerId: null,
   replayTouchCursor: 0,
   goalFreezeTimer: 0,
-  crowdSoundHandle: null,   // HTMLAudioElement returned by playSound — stopped on reset
+  crowdSoundHandle: null,   // crowd ambience loop handle
+  boostSoundHandle: null,   // synthesized boost jet sound handle
   ballCam: false,
   cameraShake: 0,
   message: "Build your car and hit play",
