@@ -21,6 +21,10 @@ let _ballCamAngle = 0;
 // lazily so wall-bounce reversals don't snap the camera.
 let _replayDroneAngle = 0;
 
+// Pre-contact side angle: locked at replay start so the side camera doesn't
+// wander — seeded perpendicular to the scorer car's travel direction.
+let _replaySideAngle = 0;
+
 // Supersonic speed-line streaks — persistent so they animate smoothly
 function _makeStreak() {
   return {
@@ -49,6 +53,12 @@ export function resetReplayDrone() {
   // Seed the drone angle from the ball's current velocity so the first frame
   // of the replay has a sensible starting position rather than facing 0°.
   _replayDroneAngle = Math.atan2(state.ball.vz || 0.01, state.ball.vx || 0.01);
+
+  // Seed the pre-contact side angle perpendicular to the scorer car's heading.
+  // Adding π/2 places the camera to the car's right; we keep this locked for
+  // the whole replay so the side view doesn't drift mid-shot.
+  const scorer = getCarById(state.replayScorerId) || state.cars[0];
+  _replaySideAngle = (scorer ? scorer.angle : 0) + Math.PI / 2;
 }
 
 export function drawCarModels() {
@@ -1248,11 +1258,22 @@ export function snapCameraToGameStart() {
 }
 
 export function updateCamera() {
-  // Widen FOV (lower focal) while supersonic — makes the car look like it's
-  // punching through space. Pre-supersonic boost leaves FOV unchanged at 500.
+  // FOV control — three modes:
+  //   Replay pre-contact:  telephoto zoom-in (focal → 680) for dramatic close-up
+  //   Replay post-contact: wider angle (focal → 460) to track fast-moving ball
+  //   Supersonic gameplay: widen FOV (focal → 400) for speed-rush feel
+  //   Normal gameplay:     default focal 500
   const _fovCar = getPlayerCar();
-  const _targetFocal = _fovCar && _fovCar.isSuperSonic ? 400 : 500;
-  _focalLength = lerp(_focalLength, _targetFocal, 0.05);
+  const _isReplayActive = state.replayTimer > 0 && state.goalFreezeTimer <= 0 && state.replayGoalSeenTimer < 0;
+  let _targetFocal;
+  if (_isReplayActive) {
+    const _fFrames = state.replayContactFrame - state.replayCursor;
+    // Pre-contact: zoom in tighter the closer we get; post-contact: wider
+    _targetFocal = _fFrames > 0 ? 680 : 460;
+  } else {
+    _targetFocal = _fovCar && _fovCar.isSuperSonic ? 400 : 500;
+  }
+  _focalLength = lerp(_focalLength, _targetFocal, _isReplayActive ? 0.018 : 0.05);
 
   if (state.screen === "menu") {
     state.menuOrbit += 0.0025;
@@ -1395,11 +1416,13 @@ export function updateCamera() {
   }
 
   // ── Replay camera — two-phase ─────────────────────────────────────────────
-  // Phase A (pre-contact):  behind the scorer's car, looking at the ball.
+  // Phase A (pre-contact):  side-on view of the scorer's car approaching the ball.
+  //   Camera sits perpendicular to the car's travel (angle locked at replay start)
+  //   and looks at the midpoint between car and ball for a dramatic side profile.
   // Phase B (post-contact): drone floats behind the ball, following its heading.
-  // The blend fades smoothly over 30 frames (~0.5 s) around the contact point.
+  // Blends smoothly over 30 frames (~0.5 s) around the contact point.
 
-  // contactBlend: 1.0 = pure car-cam  →  0.0 = pure ball-drone
+  // contactBlend: 1.0 = pure side-cam  →  0.0 = pure ball-drone
   const framesFromContact = state.replayContactFrame - state.replayCursor;
   const contactBlend = Math.max(0, Math.min(1, framesFromContact / 30));
 
@@ -1418,24 +1441,27 @@ export function updateCamera() {
   const ballDroneY = state.ball.y + droneHeight;
   const ballDroneZ = state.ball.z - Math.sin(_replayDroneAngle) * droneDist;
 
-  // ── Car-cam (phase A) ────────────────────────────────────────────────────
-  // Position the camera behind and above the scorer's car, always looking at
-  // the ball so you can see the car chasing it down.
-  const carCamDist   = 560;
-  const carCamHeight = 220;
-  const scorerAngle  = replayFocus.angle;
-  const carCamX = replayFocus.x - Math.cos(scorerAngle) * carCamDist;
-  const carCamY = replayFocus.y + carCamHeight;
-  const carCamZ = replayFocus.z - Math.sin(scorerAngle) * carCamDist;
+  // ── Side-cam (phase A) ───────────────────────────────────────────────────
+  // Camera is locked to the side of the car's travel path (angle seeded at
+  // replay start so it never drifts). Look at the midpoint between car+ball.
+  const sideDist   = 700;
+  const sideHeight = 200;
+  const sideCamX = replayFocus.x + Math.cos(_replaySideAngle) * sideDist;
+  const sideCamY = replayFocus.y + sideHeight;
+  const sideCamZ = replayFocus.z + Math.sin(_replaySideAngle) * sideDist;
+  // Look at the midpoint so both car and ball stay in frame
+  const midX = (replayFocus.x + state.ball.x) * 0.5;
+  const midY = (replayFocus.y + state.ball.y) * 0.5 + 20;
+  const midZ = (replayFocus.z + state.ball.z) * 0.5;
 
   // ── Blend the two positions ──────────────────────────────────────────────
-  const targetCamX = lerp(ballDroneX, carCamX, contactBlend);
-  const targetCamY = lerp(ballDroneY, carCamY, contactBlend);
-  const targetCamZ = lerp(ballDroneZ, carCamZ, contactBlend);
-  // Both phases look at the ball; the ball's vertical offset just centres it.
-  const targetLookX = state.ball.x;
-  const targetLookY = state.ball.y + 20;
-  const targetLookZ = state.ball.z;
+  const targetCamX = lerp(ballDroneX, sideCamX, contactBlend);
+  const targetCamY = lerp(ballDroneY, sideCamY, contactBlend);
+  const targetCamZ = lerp(ballDroneZ, sideCamZ, contactBlend);
+  // Pre-contact looks at car+ball midpoint; post-contact looks at the ball
+  const targetLookX = lerp(state.ball.x, midX, contactBlend);
+  const targetLookY = lerp(state.ball.y + 20, midY, contactBlend);
+  const targetLookZ = lerp(state.ball.z, midZ, contactBlend);
 
   const droneLerp = 0.045;
   state.camera.x = lerp(state.camera.x, targetCamX, droneLerp);
