@@ -23,83 +23,97 @@ export const SOUNDS = {
 };
 
 // ── Preload ──────────────────────────────────────────────────────────────────
-// Create one HTMLAudioElement per sound up-front so the browser can buffer the
-// file before it's needed.  We clone it at play time to allow overlapping plays.
-const _preloaded = {};
-for (const [name, src] of Object.entries(SOUNDS)) {
-  const el = new Audio(src);
-  el.preload = "auto";
-  _preloaded[name] = el;
+// Decode every sound into an AudioBuffer up-front using Web Audio API.
+// This allows gain values above 1.0 (louder than the original file).
+let _actx = null;
+const _buffers = {};
+
+function _getCtx() {
+  if (!_actx) _actx = new (window.AudioContext || window.webkitAudioContext)();
+  return _actx;
+}
+
+async function _loadBuffer(name, url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.arrayBuffer();
+    _buffers[name] = await _getCtx().decodeAudioData(raw);
+  } catch (e) {
+    console.warn(`[audio] could not load "${name}":`, e.message);
+  }
+}
+
+for (const [name, url] of Object.entries(SOUNDS)) {
+  _loadBuffer(name, url);
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Call once on the first user gesture so the browser's autoplay policy is
- * satisfied.  With HTMLAudio this just kicks off a silent resume — the
- * actual sounds are already buffered.
+ * Call once on the first user gesture — resumes the AudioContext if the
+ * browser suspended it before interaction.
  */
 export function initAudio() {
-  // Touch every preloaded element so mobile browsers unblock playback
-  for (const el of Object.values(_preloaded)) {
-    el.load();
-  }
+  const ctx = _getCtx();
+  if (ctx.state === "suspended") ctx.resume();
 }
 
 /**
  * Play a registered sound.
  * @param {string} name    key from the SOUNDS registry
  * @param {object} opts
- *   volume {number}  0–1, default 1
+ *   volume {number}  gain multiplier — values >1 amplify beyond original, default 1
  *   loop   {boolean} loop until stopped, default false
  *   offset {number}  start offset in seconds, default 0
- * @returns HTMLAudioElement handle — pass to stopSound() / fadeOut()
+ * @returns handle { source, gain } — pass to stopSound() / fadeOut()
  */
 export function playSound(name, { volume = 1.0, loop = false, offset = 0 } = {}) {
-  const src = _preloaded[name];
-  if (!src) {
-    console.warn(`[audio] unknown sound: "${name}"`);
+  const ctx = _getCtx();
+  if (ctx.state === "suspended") ctx.resume();
+
+  const buffer = _buffers[name];
+  if (!buffer) {
+    console.warn(`[audio] "${name}" not ready yet`);
     return null;
   }
 
-  // Clone so multiple simultaneous plays work independently
-  const el = src.cloneNode();
-  el.volume = Math.max(0, Math.min(1, volume));
-  el.loop = loop;
-  el.currentTime = offset;
-  el.play().catch(() => {
-    // Autoplay blocked — usually means initAudio hasn't fired yet
-    console.warn(`[audio] playback blocked for "${name}" (no user gesture yet?)`);
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = loop;
+
+  const gain = ctx.createGain();
+  gain.gain.value = Math.max(0, volume); // no upper cap — allows >1 amplification
+  source.connect(gain);
+  gain.connect(ctx.destination);
+  source.start(0, offset);
+
+  // Expose .volume setter so callers can adjust on the fly (e.g. crowd loop)
+  const handle = { source, gain };
+  Object.defineProperty(handle, "volume", {
+    get: () => gain.gain.value,
+    set: (v) => { gain.gain.value = Math.max(0, v); },
   });
-  return el;
+  return handle;
 }
 
 /**
- * Stop a sound immediately.
- * @param {HTMLAudioElement|null} handle — returned by playSound
+ * Stop a looping sound immediately.
+ * @param {{ source, gain }|null} handle — returned by playSound
  */
 export function stopSound(handle) {
   if (!handle) return;
-  handle.pause();
-  handle.currentTime = 0;
+  try { handle.source.stop(); } catch { /* already stopped */ }
 }
 
 /**
  * Smoothly fade out then stop a sound.
- * @param {HTMLAudioElement|null} handle
+ * @param {{ source, gain }|null} handle
  * @param {number} seconds  fade duration (default 0.5s)
  */
 export function fadeOut(handle, seconds = 0.5) {
   if (!handle) return;
-  const startVol = handle.volume;
-  const steps = Math.max(1, Math.round(seconds * 60));
-  let step = 0;
-  const id = setInterval(() => {
-    step++;
-    handle.volume = Math.max(0, startVol * (1 - step / steps));
-    if (step >= steps) {
-      clearInterval(id);
-      stopSound(handle);
-    }
-  }, 1000 / 60);
+  const ctx = _getCtx();
+  handle.gain.gain.setTargetAtTime(0, ctx.currentTime, seconds / 3);
+  setTimeout(() => stopSound(handle), (seconds + 0.2) * 1000);
 }

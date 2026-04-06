@@ -305,7 +305,7 @@ export function triggerGoalSequence(scoredByTeam, scorerId) {
     state.cameraShake = 3 + Math.max(0, 1 - dist / 5000) * 25;
   }
   // Blast the goal explosion sound
-  playSound("goal_explosion", { volume: 1.0 });
+  playSound("goal_explosion", { volume: 2.5 });
 }
 
 export function applyReplayFrame(frame) {
