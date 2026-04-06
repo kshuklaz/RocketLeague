@@ -14,6 +14,7 @@ export const SOUNDS = {
   crowd_cheer:       "sounds/crowd_cheer.mp3",
   kickoff_countdown: "sounds/kickoff_countdown.mp3",
   match_countdown:   "sounds/match_countdown.mp3",
+  goal_explosion:    "sounds/goal_explosion.mp3",
   // Examples (uncomment + add file to sounds/):
   // boost:       "sounds/boost.mp3",
   // hit:         "sounds/hit.mp3",

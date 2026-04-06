@@ -306,6 +306,8 @@ export function triggerGoalSequence(scoredByTeam, scorerId) {
   }
   // Crowd erupts on goal — just crank up the always-running background loop.
   if (state.crowdSoundHandle) state.crowdSoundHandle.volume = 0.85;
+  // Blast the goal explosion sound
+  playSound("goal_explosion", { volume: 1.0 });
 }
 
 export function applyReplayFrame(frame) {
