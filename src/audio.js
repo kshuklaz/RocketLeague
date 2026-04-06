@@ -165,7 +165,7 @@ export function startBoostSound() {
   // Master gain — quick attack, controlled by stopBoostSound for fade-out
   const master = ctx.createGain();
   master.gain.setValueAtTime(0, now);
-  master.gain.linearRampToValueAtTime(0.6, now + 0.15);
+  master.gain.linearRampToValueAtTime(0.25, now + 0.15);
   master.connect(ctx.destination);
 
   // Mild distortion waveshaper for jet-engine grit
