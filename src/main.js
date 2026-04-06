@@ -98,13 +98,16 @@ function updateGame(dt) {
   }
 
   if (state.mode !== "freeplay" && state.kickoffTimer > 0) {
-    const prevKickoffTimer = state.kickoffTimer;
     state.kickoffTimer = Math.max(0, state.kickoffTimer - dt);
-    // Play countdown sound the instant the "3" banner first appears.
-    // The timer starts at 4 and counts down; "3" is displayed while it is
-    // in the (3, 4] window, so we fire on the first frame it drops below 4.
-    if (prevKickoffTimer >= 4 && state.kickoffTimer < 4) {
-      playSound("kickoff_countdown", { volume: 0.8 });
+    // Arm the sound on the first frame of every kickoff (timer just below 4).
+    if (state.kickoffTimer < 4 && state.kickoffTimer > 3) {
+      if (!_kickoffSoundArmed) {
+        _kickoffSoundArmed = true;
+        playSound("kickoff_countdown", { volume: 0.8 });
+      }
+    } else {
+      // Timer has moved past the 3-4 window — reset so next kickoff re-arms.
+      _kickoffSoundArmed = false;
     }
     // use the UI helper so that the banner timer is refreshed each time we
     // change the text. this prevents situations where the timer has already
@@ -190,6 +193,9 @@ function updateGame(dt) {
 // fixed‑time physics loop with interpolation for smoother rendering
 const FIXED_STEP = 1 / 60; // 60 Hz simulation target
 let accumulator = 0;
+// Armed to true whenever a new kickoff starts; cleared after the sound fires
+// so it plays exactly once per kickoff regardless of frame timing.
+let _kickoffSoundArmed = false;
 
 function frame(time) {
   // compute elapsed seconds since last frame
