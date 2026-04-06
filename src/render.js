@@ -2,6 +2,7 @@ import { state, getPlayerCar, getCarById } from "./state.js";
 import { FIELD, TIME_OF_DAY, BALL_RADIUS, BIG_PAD_VALUE, CAR_PRESETS, CAMERA_LERP } from "./constants.js";
 import { clamp, lerp, hexToRgba, shade, normalizeAngle } from "./utils.js";
 import { getRampHeightAt, makeCar } from "./entities.js";
+import { initCarModel, isCarModelReady, renderCarModels } from "./carModel.js";
 
 let canvas = null;
 let ctx = null;
@@ -35,6 +36,13 @@ export function updateBasis() {
 export function initCanvas(c) {
   canvas = c;
   ctx = canvas.getContext("2d");
+  initCarModel(canvas);
+}
+
+export function getFocalLength() { return _focalLength; }
+
+export function drawCarModels() {
+  renderCarModels(ctx, state.cars, state.camera, _focalLength);
 }
 
 // camera maths ----------------------------------------------------------------
@@ -820,7 +828,10 @@ function drawCar(car) {
     ctx.ellipse(shadow.x, shadow.y, 30 * shadow.scale, 14 * shadow.scale, 0, 0, Math.PI * 2);
     ctx.fill();
   }
-  drawCarBody(car);
+  // Skip 2D body for Octane when the GLB model is loaded — rendered by Three.js
+  if (!(car.bodyStyle === "octane" && isCarModelReady())) {
+    drawCarBody(car);
+  }
   if (car.isBoosting) {
     drawCarFlame(car);
   }

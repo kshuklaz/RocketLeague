@@ -241,6 +241,7 @@ function frame(time) {
   for (const item of render.makeRenderables()) {
     item.draw();
   }
+  render.drawCarModels();
   render.drawOverlay();
   // menu-specific fix: the camera sometimes dips beneath the floor during
   // the crowd flyby shots, which would make the floor occlude the stands
