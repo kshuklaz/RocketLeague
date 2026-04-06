@@ -772,8 +772,9 @@ function drawCarBody(car) {
 function drawCarFlame(car) {
   // For the GLB Octane the exhaust is further back; use a larger offset so the
   // flame sits at the rear nozzle rather than floating above the bonnet.
-  const flameOffset = car.bodyStyle === "octane" ? 48 : 30;
-  const flameFar    = car.bodyStyle === "octane" ? 82 : 56;
+  const useModelFlame = car.bodyStyle === "octane" || car.bodyStyle === "fennec";
+  const flameOffset = useModelFlame ? 48 : 30;
+  const flameFar    = useModelFlame ? 82 : 56;
   const flameY = 10 + car.y;
   const back = projectPoint(car.x - Math.cos(car.angle) * flameOffset, flameY, car.z - Math.sin(car.angle) * flameOffset);
   const far = projectPoint(car.x - Math.cos(car.angle) * flameFar, flameY, car.z - Math.sin(car.angle) * flameFar);
@@ -832,8 +833,8 @@ function drawCar(car) {
     ctx.ellipse(shadow.x, shadow.y, 30 * shadow.scale, 14 * shadow.scale, 0, 0, Math.PI * 2);
     ctx.fill();
   }
-  // Skip 2D body for Octane when the GLB model is loaded — rendered by Three.js
-  if (!(car.bodyStyle === "octane" && isCarModelReady())) {
+  // Skip 2D body when a GLB model is loaded for this car's style
+  if (!isCarModelReady(car.bodyStyle)) {
     drawCarBody(car);
   }
   if (car.isBoosting) {

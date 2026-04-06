@@ -44,16 +44,16 @@ export const CAR_PRESETS = {
     spoiler: false,
     cabinHeight: 15,
   },
-  breakout: {
-    label: "Breakout",
-    bodyLength: 31,
-    bodyWidth: 17,
+  fennec: {
+    label: "Fennec",
+    bodyLength: 28,
+    bodyWidth: 16,
     roofLength: 13,
-    roofWidth: 12,
-    hoodLength: 34,
-    hoodWidth: 8,
+    roofWidth: 11,
+    hoodLength: 32,
+    hoodWidth: 10,
     spoiler: true,
-    cabinHeight: 17,
+    cabinHeight: 19,
   },
 };
 

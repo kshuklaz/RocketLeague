@@ -9,22 +9,20 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 // ── Tuning ───────────────────────────────────────────────────────────────────
 // Scale the GLB to match game units (car body is ~56 units long in game).
 // Adjust if the model appears too big or too small.
-const CAR_MODEL_SCALE  = 0.7;
-// Rotation offset applied on top of car.angle so the model faces forward.
-// 0 = model's default +Z aligns with game's forward direction.
-// Adjust by π/2 increments if the model faces the wrong way.
-const MODEL_ROT_OFFSET = 0;
-// Vertical offset so the model sits flush on the ground plane
-const MODEL_Y_OFFSET   = 0;
+// Per-model tuning — scale, rotation offset, vertical offset
+const MODEL_CONFIG = {
+  octane: { scale: 0.7,  rotOffset: 0, yOffset: 0 },
+  fennec: { scale: 0.7,  rotOffset: 0, yOffset: 0 },
+};
 
 // ── Internal state ───────────────────────────────────────────────────────────
-let _offscreen    = null;   // OffscreenCanvas or regular canvas
-let _renderer     = null;   // THREE.WebGLRenderer
-let _scene        = null;   // THREE.Scene
-let _camera       = null;   // THREE.PerspectiveCamera
-let _template     = null;   // original loaded gltf.scene (never added to scene)
-let _ready        = false;
-const _carMeshes  = new Map(); // car.id → THREE.Object3D clone
+let _offscreen    = null;
+let _renderer     = null;
+let _scene        = null;
+let _camera       = null;
+const _templates  = {};       // bodyStyle → THREE.Object3D template
+const _readySet   = new Set();// which bodyStyles have finished loading
+const _carMeshes  = new Map();// car.id → THREE.Object3D clone
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 export function initCarModel(mainCanvas) {
@@ -51,16 +49,18 @@ export function initCarModel(mainCanvas) {
   _scene.add(fill);
 
   const loader = new GLTFLoader();
-  loader.load(
-    "models/octane.glb",
-    (gltf) => {
-      _template = gltf.scene;
-      _template.scale.setScalar(CAR_MODEL_SCALE);
-      _ready = true;
-    },
-    undefined,
-    (err) => console.warn("[carModel] GLB load error:", err),
-  );
+  for (const [style, cfg] of Object.entries(MODEL_CONFIG)) {
+    loader.load(
+      `models/${style}.glb`,
+      (gltf) => {
+        _templates[style] = gltf.scene;
+        _templates[style].scale.setScalar(cfg.scale);
+        _readySet.add(style);
+      },
+      undefined,
+      (err) => console.warn(`[carModel] could not load ${style}.glb:`, err),
+    );
+  }
 }
 
 export function resizeCarModel(w, h) {
@@ -72,7 +72,9 @@ export function resizeCarModel(w, h) {
   _camera.updateProjectionMatrix();
 }
 
-export function isCarModelReady() { return _ready; }
+export function isCarModelReady(style) {
+  return style ? _readySet.has(style) : _readySet.size > 0;
+}
 
 // ── Per-frame render ─────────────────────────────────────────────────────────
 /**
@@ -112,23 +114,22 @@ export function renderCarModels(ctx, cars, camState, focalLen) {
     }
   }
 
-  // ── Position / rotate each Octane car ────────────────────────────────────
+  // ── Position / rotate each model car ────────────────────────────────────
   let hasVisible = false;
   for (const car of cars) {
-    if (car.bodyStyle !== "octane") continue;
+    const cfg = MODEL_CONFIG[car.bodyStyle];
+    if (!cfg || !_readySet.has(car.bodyStyle)) continue;
 
     let mesh = _carMeshes.get(car.id);
     if (!mesh) {
-      mesh = _template.clone(true);
+      mesh = _templates[car.bodyStyle].clone(true);
       _applyCarColor(mesh, car.color);
       _scene.add(mesh);
       _carMeshes.set(car.id, mesh);
     }
 
-    mesh.position.set(car.x, car.y + MODEL_Y_OFFSET, car.z);
-    // car.angle=0 → facing +X; Three.js rotation.y rotates CCW from +Z
-    // offset adjusts for the model's baked orientation
-    mesh.rotation.y = -car.angle + MODEL_ROT_OFFSET;
+    mesh.position.set(car.x, car.y + cfg.yOffset, car.z);
+    mesh.rotation.y = -car.angle + cfg.rotOffset;
     hasVisible = true;
   }
 
