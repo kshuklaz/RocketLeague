@@ -22,7 +22,7 @@ let _scene        = null;
 let _camera       = null;
 const _templates  = {};       // bodyStyle → THREE.Object3D template
 const _readySet   = new Set();// which bodyStyles have finished loading
-const _carMeshes  = new Map();// car.id → THREE.Object3D clone
+const _carMeshes  = new Map();// car.id → { mesh, bodyStyle }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 export function initCarModel(mainCanvas) {
@@ -106,10 +106,11 @@ export function renderCarModels(ctx, cars, camState, focalLen) {
   _camera.position.set(camState.x, camState.y, camState.z);
   _camera.lookAt(camState.targetX, camState.targetY, camState.targetZ);
 
-  // ── Remove meshes for cars that no longer exist ───────────────────────────
-  for (const [id, mesh] of _carMeshes) {
-    if (!cars.find((c) => c.id === id)) {
-      _scene.remove(mesh);
+  // ── Remove meshes for cars that no longer exist or changed body style ────
+  for (const [id, entry] of _carMeshes) {
+    const car = cars.find((c) => c.id === id);
+    if (!car || car.bodyStyle !== entry.bodyStyle) {
+      _scene.remove(entry.mesh);
       _carMeshes.delete(id);
     }
   }
@@ -120,16 +121,17 @@ export function renderCarModels(ctx, cars, camState, focalLen) {
     const cfg = MODEL_CONFIG[car.bodyStyle];
     if (!cfg || !_readySet.has(car.bodyStyle)) continue;
 
-    let mesh = _carMeshes.get(car.id);
-    if (!mesh) {
-      mesh = _templates[car.bodyStyle].clone(true);
+    let entry = _carMeshes.get(car.id);
+    if (!entry) {
+      const mesh = _templates[car.bodyStyle].clone(true);
       _applyCarColor(mesh, car.color);
       _scene.add(mesh);
-      _carMeshes.set(car.id, mesh);
+      entry = { mesh, bodyStyle: car.bodyStyle };
+      _carMeshes.set(car.id, entry);
     }
 
-    mesh.position.set(car.x, car.y + cfg.yOffset, car.z);
-    mesh.rotation.y = -car.angle + cfg.rotOffset;
+    entry.mesh.position.set(car.x, car.y + cfg.yOffset, car.z);
+    entry.mesh.rotation.y = -car.angle + cfg.rotOffset;
     hasVisible = true;
   }
 
