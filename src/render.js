@@ -1394,35 +1394,55 @@ export function updateCamera() {
     return;
   }
 
-  // ── Replay drone camera ───────────────────────────────────────────────────
-  // Floats behind-and-above the ball like a drone, always looking at the ball.
-  // _replayDroneAngle tracks the ball's travel heading with very lazy lerp so
-  // wall-bounce velocity reversals never snap the camera angle.
+  // ── Replay camera — two-phase ─────────────────────────────────────────────
+  // Phase A (pre-contact):  behind the scorer's car, looking at the ball.
+  // Phase B (post-contact): drone floats behind the ball, following its heading.
+  // The blend fades smoothly over 30 frames (~0.5 s) around the contact point.
+
+  // contactBlend: 1.0 = pure car-cam  →  0.0 = pure ball-drone
+  const framesFromContact = state.replayContactFrame - state.replayCursor;
+  const contactBlend = Math.max(0, Math.min(1, framesFromContact / 30));
+
+  // ── Ball-drone (phase B) ─────────────────────────────────────────────────
   const ballSpeed = Math.sqrt(state.ball.vx * state.ball.vx + state.ball.vz * state.ball.vz);
   if (ballSpeed > 30) {
-    // Only update heading when ball is actually moving — avoids jitter at rest
     const ballHeading = Math.atan2(state.ball.vz, state.ball.vx);
     let hdiff = ballHeading - _replayDroneAngle;
     while (hdiff > Math.PI)  hdiff -= 2 * Math.PI;
     while (hdiff < -Math.PI) hdiff += 2 * Math.PI;
-    _replayDroneAngle += hdiff * 0.025; // very lazy — smooth through bounces
+    _replayDroneAngle += hdiff * 0.025; // lazy — smooth through wall bounces
   }
-
-  // Camera sits 550 units behind the ball (opposite to travel), 220 above
-  const droneDist = 550;
+  const droneDist   = 550;
   const droneHeight = 220;
-  const droneX = state.ball.x - Math.cos(_replayDroneAngle) * droneDist;
-  const droneY = state.ball.y + droneHeight;
-  const droneZ = state.ball.z - Math.sin(_replayDroneAngle) * droneDist;
+  const ballDroneX = state.ball.x - Math.cos(_replayDroneAngle) * droneDist;
+  const ballDroneY = state.ball.y + droneHeight;
+  const ballDroneZ = state.ball.z - Math.sin(_replayDroneAngle) * droneDist;
 
-  // Use a slower lerp for replay so the camera drifts gently rather than snapping
+  // ── Car-cam (phase A) ────────────────────────────────────────────────────
+  // Position the camera behind and above the scorer's car, always looking at
+  // the ball so you can see the car chasing it down.
+  const carCamDist   = 560;
+  const carCamHeight = 220;
+  const scorerAngle  = replayFocus.angle;
+  const carCamX = replayFocus.x - Math.cos(scorerAngle) * carCamDist;
+  const carCamY = replayFocus.y + carCamHeight;
+  const carCamZ = replayFocus.z - Math.sin(scorerAngle) * carCamDist;
+
+  // ── Blend the two positions ──────────────────────────────────────────────
+  const targetCamX = lerp(ballDroneX, carCamX, contactBlend);
+  const targetCamY = lerp(ballDroneY, carCamY, contactBlend);
+  const targetCamZ = lerp(ballDroneZ, carCamZ, contactBlend);
+  // Both phases look at the ball; the ball's vertical offset just centres it.
+  const targetLookX = state.ball.x;
+  const targetLookY = state.ball.y + 20;
+  const targetLookZ = state.ball.z;
+
   const droneLerp = 0.045;
-  state.camera.x = lerp(state.camera.x, droneX, droneLerp);
-  state.camera.y = lerp(state.camera.y, droneY, droneLerp);
-  state.camera.z = lerp(state.camera.z, droneZ, droneLerp);
-  // Always look at the ball (with a tiny vertical offset so it's centred in frame)
-  state.camera.targetX = lerp(state.camera.targetX, state.ball.x, 0.07);
-  state.camera.targetY = lerp(state.camera.targetY, state.ball.y + 20, 0.07);
-  state.camera.targetZ = lerp(state.camera.targetZ, state.ball.z, 0.07);
+  state.camera.x = lerp(state.camera.x, targetCamX, droneLerp);
+  state.camera.y = lerp(state.camera.y, targetCamY, droneLerp);
+  state.camera.z = lerp(state.camera.z, targetCamZ, droneLerp);
+  state.camera.targetX = lerp(state.camera.targetX, targetLookX, 0.07);
+  state.camera.targetY = lerp(state.camera.targetY, targetLookY, 0.07);
+  state.camera.targetZ = lerp(state.camera.targetZ, targetLookZ, 0.07);
 
 }
