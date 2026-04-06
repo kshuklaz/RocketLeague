@@ -87,7 +87,7 @@ export function isCarModelReady(style) {
  * @param {number}                  focalLen   current _focalLength from render.js
  */
 export function renderCarModels(ctx, cars, camState, focalLen) {
-  if (!_ready) return;
+  if (_readySet.size === 0) return;
 
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
