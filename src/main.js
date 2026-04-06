@@ -145,7 +145,7 @@ function updateGame(dt) {
       if (!state.warningFlags.countdown.has(seconds) && previousTime > seconds && state.matchTime <= seconds) {
         state.warningFlags.countdown.add(seconds);
         ui.setBanner(String(seconds), 0.95);
-        playSound("kickoff_countdown", { volume: 0.8 });
+        playSound("match_countdown", { volume: 0.8 });
         break;
       }
     }
