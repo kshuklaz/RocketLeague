@@ -13,7 +13,7 @@ const CAR_MODEL_SCALE  = 0.47;
 // Rotation offset applied on top of car.angle so the model faces forward.
 // 0 = model's default +Z aligns with game's forward direction.
 // Adjust by π/2 increments if the model faces the wrong way.
-const MODEL_ROT_OFFSET = Math.PI;
+const MODEL_ROT_OFFSET = 0;
 // Vertical offset so the model sits flush on the ground plane
 const MODEL_Y_OFFSET   = 0;
 
