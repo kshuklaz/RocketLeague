@@ -187,7 +187,9 @@ export function startBoostSound() {
   osc1.connect(g1); g1.connect(dist);
   osc2.connect(g2); g2.connect(dist);
 
-  // Bandpass noise for the high-frequency air-rush texture
+  // ── Whoosh layer: highpass noise that sweeps 400→4000 Hz each cycle ────────
+  // Each sweep starts low (dull rush) and climbs to a bright hiss — sounds
+  // like air being forced through an accelerating turbine.
   const nLen = ctx.sampleRate * 2;
   const nBuf = ctx.createBuffer(1, nLen, ctx.sampleRate);
   const nd = nBuf.getChannelData(0);
@@ -195,15 +197,33 @@ export function startBoostSound() {
   const noiseNode = ctx.createBufferSource();
   noiseNode.buffer = nBuf;
   noiseNode.loop = true;
-  const nFilter = ctx.createBiquadFilter();
-  nFilter.type = "bandpass";
-  nFilter.frequency.value = 1400;
-  nFilter.Q.value = 1.8;
-  const nGain = ctx.createGain();
-  nGain.gain.value = 0.18;
-  noiseNode.connect(nFilter);
-  nFilter.connect(nGain);
-  nGain.connect(master);
+
+  // Two filters in series: highpass strips low rumble, bandpass shapes the sweep
+  const hpFilter = ctx.createBiquadFilter();
+  hpFilter.type = "highpass";
+  hpFilter.frequency.value = 300;
+
+  const whooshFilter = ctx.createBiquadFilter();
+  whooshFilter.type = "bandpass";
+  whooshFilter.Q.value = 0.8; // wide band for a natural whoosh
+
+  const whooshGain = ctx.createGain();
+  whooshGain.gain.value = 0.35;
+
+  noiseNode.connect(hpFilter);
+  hpFilter.connect(whooshFilter);
+  whooshFilter.connect(whooshGain);
+  whooshGain.connect(master);
+
+  // Schedule whoosh frequency sweeps in lock-step with the jet cycles
+  function _scheduleWhoosh(from, n) {
+    for (let i = 0; i < n; i++) {
+      const t   = from + i * _BOOST_CYCLE;
+      const end = t + _BOOST_CYCLE;
+      whooshFilter.frequency.setValueAtTime(400, t);
+      whooshFilter.frequency.exponentialRampToValueAtTime(4000, end);
+    }
+  }
 
   osc1.start(now);
   osc2.start(now);
@@ -211,9 +231,11 @@ export function startBoostSound() {
 
   // Schedule first 5 cycles immediately, then keep topping up every 3 cycles
   _scheduleBoostCycles(osc1, g1, osc2, g2, now, 5);
+  _scheduleWhoosh(now, 5);
   let _nextAt = now + _BOOST_CYCLE * 3;
   const intervalId = setInterval(() => {
     _scheduleBoostCycles(osc1, g1, osc2, g2, _nextAt, 4);
+    _scheduleWhoosh(_nextAt, 4);
     _nextAt += _BOOST_CYCLE * 4;
   }, _BOOST_CYCLE * 2 * 1000);
 
