@@ -1435,8 +1435,8 @@ export function updateCamera() {
     while (hdiff < -Math.PI) hdiff += 2 * Math.PI;
     _replayDroneAngle += hdiff * 0.025; // lazy — smooth through wall bounces
   }
-  const droneDist   = 550;
-  const droneHeight = 220;
+  const droneDist   = 950;
+  const droneHeight = 340;
   const ballDroneX = state.ball.x - Math.cos(_replayDroneAngle) * droneDist;
   const ballDroneY = state.ball.y + droneHeight;
   const ballDroneZ = state.ball.z - Math.sin(_replayDroneAngle) * droneDist;
@@ -1444,8 +1444,8 @@ export function updateCamera() {
   // ── Side-cam (phase A) ───────────────────────────────────────────────────
   // Camera is locked to the side of the car's travel path (angle seeded at
   // replay start so it never drifts). Look at the midpoint between car+ball.
-  const sideDist   = 700;
-  const sideHeight = 200;
+  const sideDist   = 1050;
+  const sideHeight = 320;
   const sideCamX = replayFocus.x + Math.cos(_replaySideAngle) * sideDist;
   const sideCamY = replayFocus.y + sideHeight;
   const sideCamZ = replayFocus.z + Math.sin(_replaySideAngle) * sideDist;
@@ -1463,12 +1463,12 @@ export function updateCamera() {
   const targetLookY = lerp(state.ball.y + 20, midY, contactBlend);
   const targetLookZ = lerp(state.ball.z, midZ, contactBlend);
 
-  const droneLerp = 0.045;
+  const droneLerp = 0.022;
   state.camera.x = lerp(state.camera.x, targetCamX, droneLerp);
   state.camera.y = lerp(state.camera.y, targetCamY, droneLerp);
   state.camera.z = lerp(state.camera.z, targetCamZ, droneLerp);
-  state.camera.targetX = lerp(state.camera.targetX, targetLookX, 0.07);
-  state.camera.targetY = lerp(state.camera.targetY, targetLookY, 0.07);
-  state.camera.targetZ = lerp(state.camera.targetZ, targetLookZ, 0.07);
+  state.camera.targetX = lerp(state.camera.targetX, targetLookX, 0.035);
+  state.camera.targetY = lerp(state.camera.targetY, targetLookY, 0.035);
+  state.camera.targetZ = lerp(state.camera.targetZ, targetLookZ, 0.035);
 
 }
