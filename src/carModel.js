@@ -12,8 +12,9 @@ import { state } from "./state.js";
 // Adjust if the model appears too big or too small.
 // Per-model tuning — scale, rotation offset, vertical offset
 const MODEL_CONFIG = {
-  octane: { scale: 0.7,  rotOffset: 0, yOffset: 0 },
-  fennec: { scale: 0.7,  rotOffset: 0, yOffset: 0 },
+  octane:  { scale: 0.7,  rotOffset: 0, yOffset: 0 },
+  fennec:  { scale: 0.7,  rotOffset: 0, yOffset: 0 },
+  dominus: { scale: 0.7,  rotOffset: 0, yOffset: 0 },
 };
 
 // ── Internal state ───────────────────────────────────────────────────────────

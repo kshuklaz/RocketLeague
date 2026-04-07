@@ -792,7 +792,7 @@ function drawCarBody(car) {
 function drawCarFlame(car) {
   // For the GLB Octane the exhaust is further back; use a larger offset so the
   // flame sits at the rear nozzle rather than floating above the bonnet.
-  const useModelFlame = car.bodyStyle === "octane" || car.bodyStyle === "fennec";
+  const useModelFlame = car.bodyStyle === "octane" || car.bodyStyle === "fennec" || car.bodyStyle === "dominus";
   const flameOffset = useModelFlame ? 48 : 30;
   const flameFar    = useModelFlame ? 82 : 56;
   const flameY = 10 + car.y;
